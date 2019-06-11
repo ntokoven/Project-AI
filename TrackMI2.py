@@ -53,8 +53,18 @@ class MINE(nn.Module):
                 # x, y = x.cuda(), y.cuda()
                 model.zero_grad()
                 if target:
+<<<<<<< HEAD
+                    print('BEFORE',x.shape)
+                    
+                    # tX=transF(x).detach()
+                    # tX=tX.reshape(tX.shape[0],tX.shape[1]*tX.shape[2]*tX.shape[3])
+                    # tX=nn.ReLu(nn.Linear(tX.shape[0], tY.shape[0]))
+                    print('AFTER',tX.shape)
+                    loss = model.lower_bound(y,tX)
+=======
                     tX = transF(x).detach()
                     loss = model.lower_bound(y, tX)
+>>>>>>> 287b5a050570a8e5d80c67b1967066c277c68a84
                 else:
                     tX = transF(x).detach()
                     loss = model.lower_bound(x, tX)
@@ -78,19 +88,22 @@ class MINE(nn.Module):
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
+
         self.conv1 = nn.Conv2d(1, 20, 5, 1)
         self.conv2 = nn.Conv2d(20, 50, 5, 1)
         self.fc1 = nn.Linear(4 * 4 * 50, 500)
         self.fc2 = nn.Linear(500, 10)
+        self.moduleList = nn.ModuleList([self.conv1,self.conv2,self.fc1,self.fc2])
+
 
     def forward(self, x):
-        x = F.relu(self.conv1(x))
+        x = F.relu(self.moduleList[0](x))
         x = F.max_pool2d(x, 2, 2)
-        x = F.relu(self.conv2(x))
+        x = F.relu(self.moduleList[1](x))
         x = F.max_pool2d(x, 2, 2)
         x = x.view(-1, 4 * 4 * 50)
-        x = F.relu(self.fc1(x))
-        x = self.fc2(x)
+        x = F.relu(self.moduleList[2](x))
+        x = self.moduleList[3](x)
         return F.log_softmax(x, dim=1)
 
 
@@ -191,6 +204,17 @@ class TrackMI():
             batch_size=self.batch_size, shuffle=True, **kwargs)
 
     def run(self):
+<<<<<<< HEAD
+
+        for i in range(100):
+            if (i+1)%1==0:
+                # self.convN.train(self.train_loader,i)
+                for layer in self.convN.model.moduleList:
+                    print("yes")
+                    transFunction=layer
+                    mIx=self.mine.trainMine(self.train_loader,self.mineEpoch,self.batch_size,plot=False,transF=transFunction,target=True)
+                    mIy=self.mine.trainMine(self.train_loader,self.mineEpoch,self.batch_size,plot=False,transF=transFunction,target=True)
+=======
         for i in range(self.convN.args.epochs):
             if (i+1) % 1 == 0:
                 # self.convN.train(self.train_loader,i)
@@ -198,6 +222,7 @@ class TrackMI():
                     transFunction = layer
                     mIx = self.mine.trainMine(self.train_loader, self.mineEpoch, self.batch_size, plot=False, transF=transFunction, target=False)
                     mIy = self.mine.trainMine(self.train_loader, self.mineEpoch, self.batch_size, plot=False, transF=transFunction, target=True)
+>>>>>>> 287b5a050570a8e5d80c67b1967066c277c68a84
 
             else:
                 self.convN.train(self.train_loader,i)
