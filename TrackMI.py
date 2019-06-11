@@ -30,9 +30,8 @@ class MINE(nn.Module):
         y_shuffled = y[torch.randperm(y.size()[0])]
         print(x.shape,y.shape)
         T_joint = self.T(torch.cat((x, y), dim=1))
-
         T_marginal = self.T(torch.cat((x, y_shuffled), dim=1))
-
+        
         return T_joint, T_marginal
 
     def lower_bound(self, x, y):
@@ -41,14 +40,11 @@ class MINE(nn.Module):
 
         return -mine
 
-    def trainMine(self,trainLoader,epochs,batch_size,plot=False,transF=None,target=False):
+    def trainMine(self, trainLoader, epochs, batch_size, plot=False, transF=None, target=False):
         model = MINE()  # .cuda()
         optimizer = optim.Adam(model.parameters(), lr=0.01)
 
-
-
         train_loader = trainLoader  # becomes unstable and biased for batch_size of 100
-
         # Train
         loss_list = []
         for epoch in range(epochs):
@@ -57,11 +53,11 @@ class MINE(nn.Module):
                 # x, y = x.cuda(), y.cuda()
                 model.zero_grad()
                 if target:
-                    tX=transF(x).detach()
-                    loss = model.lower_bound(y,tX)
+                    tX = transF(x).detach()
+                    loss = model.lower_bound(y, tX)
                 else:
                     tX = transF(x).detach()
-                    loss=model.lower_bound(x, tX)
+                    loss = model.lower_bound(x, tX)
                 loss_per_epoch += loss
                 loss.backward()
                 optimizer.step()
@@ -132,7 +128,7 @@ class ConvNet():
         self.model = Net().to(self.device)
         self.optimizer = optim.SGD(self.model.parameters(), lr=self.args.lr, momentum=self.args.momentum)
 
-    def train(self,train_loader,epoch):
+    def train(self, train_loader,epoch):
         self.model.train()
         for batch_idx, (data, target) in enumerate(train_loader):
             data, target = data.to(self.device), target.to(self.device)
@@ -174,10 +170,10 @@ class ConvNet():
 
 class TrackMI():
     def __init__(self):
-        self.batch_size=64
-        self.mineEpoch=100
-        self.convN=ConvNet()
-        self.mine=MINE()
+        self.batch_size = 64
+        self.mineEpoch = 100
+        self.convN = ConvNet()
+        self.mine = MINE()
         # Dataloader
         kwargs = {'num_workers': 8, 'pin_memory': True}
         self.train_loader = torch.utils.data.DataLoader(
@@ -195,14 +191,13 @@ class TrackMI():
             batch_size=self.batch_size, shuffle=True, **kwargs)
 
     def run(self):
-
         for i in range(self.convN.args.epochs):
-            if (i+1)%1==0:
+            if (i+1) % 1 == 0:
                 # self.convN.train(self.train_loader,i)
                 for layer in self.convN.net.layers:
-                    transFunction=layer
-                    mIx=self.mine.trainMine(self.train_loader,self.mineEpoch,self.batch_size,plot=False,transF=transFunction,target=True)
-                    mIy=self.mine.trainMine(self.train_loader,self.mineEpoch,self.batch_size,plot=False,transF=transFunction,target=True)
+                    transFunction = layer
+                    mIx = self.mine.trainMine(self.train_loader, self.mineEpoch, self.batch_size, plot=False, transF=transFunction, target=False)
+                    mIy = self.mine.trainMine(self.train_loader, self.mineEpoch, self.batch_size, plot=False, transF=transFunction, target=True)
 
             else:
                 self.convN.train(self.train_loader,i)
