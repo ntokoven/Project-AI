@@ -58,6 +58,7 @@ class MINE(nn.Module):
                 model.zero_grad()
                 if target:
                     print('BEFORE',x.shape)
+                    
                     # tX=transF(x).detach()
                     # tX=tX.reshape(tX.shape[0],tX.shape[1]*tX.shape[2]*tX.shape[3])
                     # tX=nn.ReLu(nn.Linear(tX.shape[0], tY.shape[0]))
