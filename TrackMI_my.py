@@ -25,7 +25,7 @@ class MINE(nn.Module):
                 torch.nn.init.xavier_uniform_(module.weight)
 
     def forward(self, x, y):
-        y=y.float()
+        y = y.float()
         x = x.float()
         y_shuffled = y[torch.randperm(y.size()[0])]
         print(x.shape,y.shape)
@@ -53,7 +53,6 @@ class MINE(nn.Module):
                 # x, y = x.cuda(), y.cuda()
                 model.zero_grad()
                 if target:
-
                     tX = transF(x).detach()
                     loss = model.lower_bound(y, tX)
                 else:
@@ -62,7 +61,8 @@ class MINE(nn.Module):
                 loss_per_epoch += loss
                 loss.backward()
                 optimizer.step()
-            loss_list.append(-loss_per_epoch / len(train_loader))  # since pytorch can only minimize the return of mine is negative, we have to invert that again
+            loss_list.append(-loss_per_epoch / len(
+                train_loader))  # since pytorch can only minimize the return of mine is negative, we have to invert that again
             print(epoch, -loss_per_epoch.detach().cpu().numpy() / len(train_loader))
         if plot:
             # Plot
@@ -78,22 +78,26 @@ class MINE(nn.Module):
 class Net(nn.Module):
     def __init__(self):
         super(Net, self).__init__()
-
+        self.layers = []
         self.conv1 = nn.Conv2d(1, 20, 5, 1)
+        self.layers.append(self.conv1)
+        self.layers.append(nn.ReLU())
+        self.layers.append(nn.MaxPool2d(2, 2))
         self.conv2 = nn.Conv2d(20, 50, 5, 1)
+        self.layers.append(self.conv2)
+        self.layers.append(nn.ReLU())
+        self.layers.append(nn.MaxPool2d(2, 2))
         self.fc1 = nn.Linear(4 * 4 * 50, 500)
         self.fc2 = nn.Linear(500, 10)
-        self.moduleList = nn.ModuleList([self.conv1,self.conv2,self.fc1,self.fc2])
-
 
     def forward(self, x):
-        x = F.relu(self.moduleList[0](x))
+        x = F.relu(self.conv1(x))
         x = F.max_pool2d(x, 2, 2)
-        x = F.relu(self.moduleList[1](x))
+        x = F.relu(self.conv2(x))
         x = F.max_pool2d(x, 2, 2)
         x = x.view(-1, 4 * 4 * 50)
-        x = F.relu(self.moduleList[2](x))
-        x = self.moduleList[3](x)
+        x = F.relu(self.fc1(x))
+        x = self.fc2(x)
         return F.log_softmax(x, dim=1)
 
 
@@ -194,14 +198,14 @@ class TrackMI():
             batch_size=self.batch_size, shuffle=True, **kwargs)
 
     def run(self):
-
         for i in range(self.convN.args.epochs):
             if (i+1) % 1 == 0:
                 # self.convN.train(self.train_loader,i)
-                for layer in self.convN.net.layers:
+                for layer in self.convN.model.layers:
                     transFunction = layer
                     mIx = self.mine.trainMine(self.train_loader, self.mineEpoch, self.batch_size, plot=False, transF=transFunction, target=False)
                     mIy = self.mine.trainMine(self.train_loader, self.mineEpoch, self.batch_size, plot=False, transF=transFunction, target=True)
+
             else:
                 self.convN.train(self.train_loader,i)
 
