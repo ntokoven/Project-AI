@@ -58,15 +58,33 @@ data = A @ data
 x = data[:2, :].T
 y = data[2:, :].T
 
+
+W = torch.tensor([[8, 4], [3, 6]], dtype=torch.float)
+print(W.type())
+assert np.linalg.det(W.detach().numpy()) != 0
+
+x_ = x @ W.detach().numpy().T
+
 # Compute MI using: MI(Y, X) = H(Y) + H(X) - H(X,Y)
 cov = A @ A.T
-N_x = torch.distributions.multivariate_normal.MultivariateNormal(torch.zeros(2), torch.from_numpy(cov[:2, :2]))
+mean = torch.zeros(2, dtype=torch.float)
+K = torch.from_numpy(cov[:2, :2]).float()
+
+new_mean = W @ mean
+print(new_mean.type())
+new_cov = W @ K @ W.t()
+print(new_cov.type())
+N_Wx = torch.distributions.multivariate_normal.MultivariateNormal(new_mean, new_cov)
+print(N_Wx)
+
+#N_x = torch.distributions.multivariate_normal.MultivariateNormal(torch.zeros(2), torch.from_numpy(cov[:2, :2]))
+N_x = torch.distributions.multivariate_normal.MultivariateNormal(mean, K)
 N_y = torch.distributions.multivariate_normal.MultivariateNormal(torch.zeros(2), torch.from_numpy(cov[2:, 2:]))
 N_x_y = torch.distributions.multivariate_normal.MultivariateNormal(torch.zeros(4), torch.from_numpy(cov))
 
 MI = N_x.entropy().numpy() + N_y.entropy().numpy() - N_x_y.entropy().numpy()
 print(MI)
-
+'''
 # Model and optimizer
 model = MINE()#.cuda()
 optimizer = optim.Adam(model.parameters(), lr=0.01)
@@ -115,3 +133,4 @@ plt.legend(['MI', 'MINE'])
 plt.ylabel('value')
 plt.xlabel('correlation')
 plt.show()
+'''
