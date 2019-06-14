@@ -1,3 +1,7 @@
+'''
+Original version of MINE estimator for 2D case sent by Max
+'''
+
 import numpy as np
 
 import torch
@@ -25,10 +29,7 @@ class MINE(nn.Module):
 
     def forward(self, x, y):
         y_shuffled = y[torch.randperm(y.size()[0])]
-        #print(x.shape, '\n\n\n')
-        #print(y.shape, '\n\n\n')
-        #print(torch.cat((x, y), dim=1), '\n\n\n')
-        #print(self.T(torch.cat((x, y), dim=1)), '\n\n\n')
+
         T_joint = self.T(torch.cat((x, y), dim=1))
         T_marginal = self.T(torch.cat((x, y_shuffled), dim=1))
 
@@ -63,12 +64,11 @@ cov = A @ A.T
 N_x = torch.distributions.multivariate_normal.MultivariateNormal(torch.zeros(2), torch.from_numpy(cov[:2, :2]))
 N_y = torch.distributions.multivariate_normal.MultivariateNormal(torch.zeros(2), torch.from_numpy(cov[2:, 2:]))
 N_x_y = torch.distributions.multivariate_normal.MultivariateNormal(torch.zeros(4), torch.from_numpy(cov))
-
 MI = N_x.entropy().numpy() + N_y.entropy().numpy() - N_x_y.entropy().numpy()
 print(MI)
 
 # Model and optimizer
-model = MINE()#.cuda()
+model = MINE().cuda()
 optimizer = optim.Adam(model.parameters(), lr=0.01)
 
 # Dataloader
@@ -79,15 +79,14 @@ train_loader = data_utils.DataLoader(train, batch_size=1000, shuffle=True, **kwa
 
 # Train
 loss_list = []
-epochs = 100
-
+epochs = 200
 
 model.train()
 
 for epoch in range(epochs):
     loss_per_epoch = 0
     for _, (x, y) in enumerate(train_loader):
-        #x, y = x.cuda(), y.cuda()
+        x, y = x.cuda(), y.cuda()
         model.zero_grad()
         loss = model.lower_bound(x, y)
         loss_per_epoch += loss
