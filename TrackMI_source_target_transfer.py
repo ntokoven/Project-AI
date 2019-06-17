@@ -132,9 +132,6 @@ class LeNet(nn.Module):
             if type(exitLayer) != 'NoneType':
                 if layer == exitLayer:
                     break
-            #if layer == 'fc2':
-            #    x = self.sm1(x)
-            #    break
         return x
 
     def get_dims(self, x):
@@ -304,7 +301,7 @@ class TrackMI():
             plt.show()
         #return model
 
-    def run(self, mine_path=None, save=True):
+    def run(self, mine_path=None, save=False):
         '''
         TODO: make use of trained MINE estimators for visualization of LeNet training process
         '''
@@ -337,7 +334,6 @@ class TrackMI():
                     #torch.save(self.mineList[layer].state_dict(), 'MINE_models/'+layer)
                     torch.save(self.mineList[layer+'T'].state_dict(), 'MINE_models/'+layer+'T')
             self.convN.test(self.test_loader)
-            #input()
 
 
 def main():
