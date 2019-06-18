@@ -263,7 +263,7 @@ class ConvNet(nn.Module):
 
     def test(self, test_loader):
         self.model.eval()
-        print('Testing ConvNet')
+        print('\nTesting ConvNet')
         test_loss = 0
         correct = 0
         with torch.no_grad():
@@ -276,7 +276,7 @@ class ConvNet(nn.Module):
 
         test_loss /= len(test_loader.dataset)
 
-        print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
+        print('Test set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
             test_loss, correct, len(test_loader.dataset),
             100. * correct / len(test_loader.dataset)))
 
@@ -343,7 +343,7 @@ class TrackMI(nn.Module):
                 model.zero_grad()
                 if target:
                     tX = convNet(x, layer).detach()
-                    y_onehot = torch.FloatTensor(y.shape[0], self.num_classes)
+                    y_onehot = torch.FloatTensor(y.shape[0], self.num_classes).to(self.device)
                     y_onehot.zero_()
                     y_onehot.scatter_(1, y.view(y.shape[0], 1), 1)
                     loss = model.lower_bound(y_onehot, tX)
@@ -361,7 +361,7 @@ class TrackMI(nn.Module):
                 Training not on full data to save development time
                 '''
                 step += 1
-                if step == 250:
+                if step == 100:
                     break
             #print('DONE')
 
@@ -393,7 +393,6 @@ class TrackMI(nn.Module):
             #if mine_path == None:
             for layer in ['maxP1','maxP2','relu3','sm1']:
                 #self.mineList[layer] = 
-                continue
                 self.mi_values[layer].append(self.trainMine(self.train_loader, self.mine_epochs, self.batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer],target=False, layer=layer))
                 #self.mineList[layer+'T'] = 
                 self.mi_values[layer+'T'].append(self.trainMine(self.train_loader, self.mine_epochs, self.batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer+'T'], target=True, layer=layer))
