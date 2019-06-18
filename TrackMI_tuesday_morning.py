@@ -132,6 +132,9 @@ class LeNet(nn.Module):
             if type(exitLayer) != 'NoneType':
                 if layer == exitLayer:
                     break
+            #if layer == 'fc2':
+            #    x = self.sm1(x)
+            #    break
         return x
 
     def get_dims(self, x):
@@ -151,7 +154,7 @@ class LeNet(nn.Module):
                     dims['sm1'] = x.shape
         return dims
 
-
+#Class for training and evaluating of target network
 class ConvNet():
     def __init__(self, args):
         self.args = args 
@@ -165,21 +168,38 @@ class ConvNet():
 
         self.model = LeNet().to(self.device)
         self.optimizer = optim.SGD(self.model.parameters(), lr=self.args.lr, momentum=self.args.momentum)
+        #self.need_init_mine = True
+
+    '''
+    def init_MINE(self):
+        dims = self.dimensions
+        print(dims)
+        #if True:
+        #    return
+        self.mineList = {}
+        self.mineList['maxP1'] = MINE(dims['input'], dims['maxP1'])
+        self.mineList['maxP2'] = MINE(dims['input'], dims['maxP2'])
+        self.mineList['relu3'] = MINE(dims['input'], dims['relu3'])
+        self.mineList['sm1'] = MINE(dims['input'], dims['sm1'])
+        self.mineList['maxP1T'] = MINE(dims['target'], dims['maxP1'])
+        self.mineList['maxP2T'] = MINE(dims['target'], dims['maxP2'])
+        self.mineList['relu3T'] = MINE(dims['target'], dims['relu3'])
+        self.mineList['sm1T'] = MINE(dims['target'], dims['sm1'])
+        self.need_init_mine = False
+    '''
 
     def train(self, train_loader, epoch):
         self.model.train()
         print('Training ConvNet. Epoch: ', epoch)
         for batch_idx, (data, target) in enumerate(train_loader):
+            '''
             if batch_idx == 0:
-                # xShape=data.shape
-                # yShape=target.shape
-                dimensions = self.model.get_dims(data)
-                dimensions['input'] = data.shape
-                dimensions['target'] = target.shape
-                # dimensions['xShape']=xShape
-                # dimensions['yShape'] =yShape
-                self.dimensions = dimensions
-
+                self.dimensions = self.model.get_dims(data)
+                self.dimensions['input'] = data.shape
+                self.dimensions['target'] = target.shape
+                if self.need_init_mine == True:
+                    self.init_MINE()
+            '''
             data, target = data.to(self.device), target.to(self.device)
             
             self.optimizer.zero_grad()
@@ -196,8 +216,8 @@ class ConvNet():
             NEED DELETE THIS
             Training not on full data to save development time
             '''
-            #if batch_idx == 50:
-            #    break
+            if batch_idx == 50:
+                break
 
     def test(self, test_loader):
         self.model.eval()
@@ -225,6 +245,7 @@ class TrackMI():
         self.batch_size = self.args.batch_size
         self.mine_epochs = self.args.mine_epochs
         self.convN = ConvNet(args)
+        self.num_classes = 10
 
         # Dataloader
         kwargs = {'num_workers': 8, 'pin_memory': True}
@@ -242,7 +263,22 @@ class TrackMI():
                 transforms.Normalize((0.1307,), (0.3081,))
             ])),
             batch_size=self.batch_size, shuffle=True, **kwargs)
-            
+        
+        for _, (data, target) in enumerate(self.train_loader):
+            self.dimensions = self.convN.model.get_dims(data)
+            self.dimensions['input'] = data.shape
+            self.dimensions['target'] = (self.batch_size, self.num_classes) #target.shape but mapped to onehot
+            break
+
+        self.mineList = {}
+        self.mineList['maxP1'] = MINE(self.dimensions['input'], self.dimensions['maxP1'])
+        self.mineList['maxP2'] = MINE(self.dimensions['input'], self.dimensions['maxP2'])
+        self.mineList['relu3'] = MINE(self.dimensions['input'], self.dimensions['relu3'])
+        self.mineList['sm1'] = MINE(self.dimensions['input'], self.dimensions['sm1'])
+        self.mineList['maxP1T'] = MINE(self.dimensions['target'], self.dimensions['maxP1'])
+        self.mineList['maxP2T'] = MINE(self.dimensions['target'], self.dimensions['maxP2'])
+        self.mineList['relu3T'] = MINE(self.dimensions['target'], self.dimensions['relu3'])
+        self.mineList['sm1T'] = MINE(self.dimensions['target'], self.dimensions['sm1'])
     
     def trainMine(self, trainLoader, mine_epochs, batch_size, plot=False, convNet=None, target=False,\
                   mineMod=None,layer=None):
@@ -261,18 +297,12 @@ class TrackMI():
                 model.zero_grad()
                 if target:
                     tX = convNet(x, layer).detach()
-                    #tX = tX.reshape(self.batch_size, (torch.prod(torch.tensor(tX.shape[1:]))))
-                    y_onehot = torch.FloatTensor(y.shape[0], 10)
-                    #if step > 800:
-                    #    print(y.shape)
-                        #input()
+                    y_onehot = torch.FloatTensor(y.shape[0], self.num_classes)
                     y_onehot.zero_()
                     y_onehot.scatter_(1, y.view(y.shape[0], 1), 1)
                     loss = model.lower_bound(y_onehot, tX)
                 else:
                     tX = convNet(x, layer).detach()
-                    #tX = tX.reshape(self.batch_size, (torch.prod(torch.tensor(tX.shape[1:]))))
-                    #x = x.reshape(self.batch_size, (torch.prod(torch.tensor(x.shape[1:]))))
                     loss = model.lower_bound(x, tX)
                 loss_per_epoch += loss
                 #print("Epoch MINE: %s. Lowerbound: %s" % (epoch, loss.item()))
@@ -283,7 +313,7 @@ class TrackMI():
                 Training not on full data to save development time
                 '''
                 step += 1
-                #if step == 800:
+                #if step == 50:
                 #    break
             print('DONE')
 
@@ -307,8 +337,12 @@ class TrackMI():
         '''
         for epoch in range(self.args.epochs):
             self.convN.train(self.train_loader, epoch)
+            '''
             if epoch == 0:
                 dims = self.convN.dimensions
+                print(dims)
+                #if True:
+                #    return
                 self.mineList = {}
                 self.mineList['maxP1'] = MINE(dims['input'], dims['maxP1'])
                 self.mineList['maxP2'] = MINE(dims['input'], dims['maxP2'])
@@ -318,22 +352,25 @@ class TrackMI():
                 self.mineList['maxP2T'] = MINE(dims['target'], dims['maxP2'])
                 self.mineList['relu3T'] = MINE(dims['target'], dims['relu3'])
                 self.mineList['sm1T'] = MINE(dims['target'], dims['sm1'])
-                
+            '''    
             '''
             NEED TO UNCOMMENT EVERYTHING HERE
             '''
-            for layer in ['sm1']:#['maxP1','maxP2','relu3','sm1']:
-                #self.mineList[layer] = 
-                #self.trainMine(self.train_loader, self.mine_epochs, self.batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer],target=False, layer=layer)
-                #self.mineList[layer+'T'] = 
-                self.trainMine(self.train_loader, self.mine_epochs, self.batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer+'T'], target=True, layer=layer)
-                '''
-                TODO: Save trained MINE models
-                '''
-                if save == True:
-                    #torch.save(self.mineList[layer].state_dict(), 'MINE_models/'+layer)
-                    torch.save(self.mineList[layer+'T'].state_dict(), 'MINE_models/'+layer+'T')
+            if mine_path == None:
+                for layer in ['sm1']:#['maxP1','maxP2','relu3','sm1']:
+                    #self.mineList[layer] = 
+                    #self.trainMine(self.train_loader, self.mine_epochs, self.batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer],target=False, layer=layer)
+                    #self.mineList[layer+'T'] = 
+                    self.trainMine(self.train_loader, self.mine_epochs, self.batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer+'T'], target=True, layer=layer)
+                    '''
+                    TODO: Save trained MINE models
+                    '''
+                    if save == True:
+                        #torch.save(self.mineList[layer].state_dict(), 'MINE_models/'+layer)
+                        torch.save(self.mineList[layer+'T'].state_dict(), 'MINE_models/'+layer+'T')
             self.convN.test(self.test_loader)
+        return self.mineList
+
 
 
 def main():
@@ -359,11 +396,11 @@ def main():
     parser.add_argument('--save-model', action='store_true', default=False,
                                 help='For Saving the current Model')
     parser.add_argument('--mine-path', type=str, default='MINE_models',
-                                help='For saving MINE models')
+                                help='For Saving the current Model')
     args = parser.parse_args()
 
     trackMI = TrackMI(args)
-    trackMI.run()
+    mineList = trackMI.run()
 
 if __name__ == '__main__':
     # freeze_support() here if program needs to be frozen
