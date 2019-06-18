@@ -13,14 +13,12 @@ from torchvision import datasets, transforms
 import math
 from tqdm import tqdm
 from collections import defaultdict
+import pickle
 
 
 class MINE(nn.Module):
     def __init__(self, shape_input, shape_output):
         super(MINE, self).__init__()
-        #print('\n\nMINE INIT\n\n')
-        #self.n_input = n_input
-        #self.n_output= n_output
         a = torch.ones(shape_input)#.item())
         b = torch.ones(shape_output)#.item())
         a, b = self.change_shape(a, b)
@@ -39,7 +37,7 @@ class MINE(nn.Module):
         y = y.float()
         x = x.float()
         batch_size = x.shape[0]
-        #x, y = self.change_shape(x, y)
+        x, y = self.change_shape(x, y)
         input_size = torch.prod(torch.tensor(x.shape[1:])).item()
         x, y = x.reshape((batch_size, input_size)), \
                y.reshape((batch_size, input_size))
@@ -61,8 +59,31 @@ class MINE(nn.Module):
     def lcm(self,a, b):
         return abs(a * b) // math.gcd(a, b)
 
+    def change_shape(self, x, layer):
+        #print("orig", x.shape, layer.shape)
+        if x.shape == layer.shape:
+            return x, layer
+        elif x.dim() == layer.dim():
+            if x.dim() == 4:
+                x = nn.Conv2d(1, 1, (x.shape[2]-layer.shape[2]+1,x.shape[2]-layer.shape[2]+1))(x)
+                if x.shape[1]!= layer.shape[1]:
+                    noRepeat=layer.shape[1]-x.shape[1]+1
+                    x=x.repeat(1,noRepeat,1,1)
+            else:
+                layer=nn.Linear(layer.shape[1],x.shape[1])(layer)
+        else:
+            if x.dim()>layer.dim():
+                x=x.reshape(x.shape[0],x.shape[1]*x.shape[2]*x.shape[3])
+                x=nn.Linear(x.shape[1],layer.shape[1])(x)
+            else:
+                layer=layer.reshape(layer.shape[0],layer.shape[1]*layer.shape[2]*layer.shape[3])
+                layer=nn.Linear(layer.shape[1],x.shape[1])(layer)
+        #print("transformed",x.shape,layer.shape)
+        return x, layer
+
+
     #"brute-force" (every with every) version of shape transition 
-    def change_shape(self, x, y): 
+    def change_shape_old(self, x, y): 
         #print('Shapes ot T input:')
         #print(x.shape)
         #print(y.shape,'\n\n\n')
@@ -301,6 +322,10 @@ class TrackMI():
         for mine_epoch in range(mine_epochs):
             loss_per_epoch = 0
             step = 0
+            '''
+            counter = 0
+            prevLoss = np.inf
+            '''
             for batch_idx, (x, y) in tqdm(enumerate(train_loader)):
                 # x, y = x.cuda(), y.cuda()
                 model.zero_grad()
@@ -318,20 +343,25 @@ class TrackMI():
                 loss.backward()
                 optimizer.step()
                 '''
+                prevLoss = loss.item()
+                if -loss>-prevLoss:
+                    counter+=1
+                    if counter>2:
+                        break
+                '''
+                #############
+                '''
                 NEED DELETE THIS
                 Training not on full data to save development time
                 '''
                 step += 1
-                #if step == 50:
-                #    break
+                if step == 50:
+                    break
             print('DONE')
 
             loss_list.append(-loss_per_epoch / len(train_loader))  # since pytorch can only minimize the return of mine is negative, we have to invert that again
-            if layer == 'sm1' and target:
-                print('Epoch MINE: %s. Lowerbound: %s' % (mine_epoch, -loss_per_epoch.detach().cpu().numpy() / len(train_loader)))
-            '''
-            if criteria of onvergence: stop learning mine
-            '''
+            #if layer == 'sm1' and target:
+            print('Epoch MINE: %s. Layer: %s. Target = %s. Lowerbound: %s' % (mine_epoch, layer, target, -loss_per_epoch.detach().cpu().numpy() / len(train_loader)))
         if plot:
             # Plot
             mine_epochs = np.arange(1, mine_epochs + 1)
@@ -351,28 +381,12 @@ class TrackMI():
         for epoch in range(self.args.epochs):
             self.convN.train(self.train_loader, epoch)
             '''
-            if epoch == 0:
-                dims = self.convN.dimensions
-                print(dims)
-                #if True:
-                #    return
-                self.mineList = {}
-                self.mineList['maxP1'] = MINE(dims['input'], dims['maxP1'])
-                self.mineList['maxP2'] = MINE(dims['input'], dims['maxP2'])
-                self.mineList['relu3'] = MINE(dims['input'], dims['relu3'])
-                self.mineList['sm1'] = MINE(dims['input'], dims['sm1'])
-                self.mineList['maxP1T'] = MINE(dims['target'], dims['maxP1'])
-                self.mineList['maxP2T'] = MINE(dims['target'], dims['maxP2'])
-                self.mineList['relu3T'] = MINE(dims['target'], dims['relu3'])
-                self.mineList['sm1T'] = MINE(dims['target'], dims['sm1'])
-            '''    
-            '''
             NEED TO UNCOMMENT EVERYTHING HERE
             '''
             #if mine_path == None:
-            for layer in ['sm1']:#['maxP1','maxP2','relu3','sm1']:
+            for layer in ['maxP2']:#['maxP1','maxP2','relu3','sm1']:
                 #self.mineList[layer] = 
-                #self.mi_values[layer].append(self.trainMine(self.train_loader, self.mine_epochs, self.batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer],target=False, layer=layer))
+                self.mi_values[layer].append(self.trainMine(self.train_loader, self.mine_epochs, self.batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer],target=False, layer=layer))
                 #self.mineList[layer+'T'] = 
                 self.mi_values[layer+'T'].append(self.trainMine(self.train_loader, self.mine_epochs, self.batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer+'T'], target=True, layer=layer))
                 '''
@@ -390,7 +404,7 @@ def build_information_plane(MI, epochs):
     layers = ['maxP1','maxP2','relu3','sm1']
     print(MI)
     for layer in ['sm1']:#MI.keys():#layers:    
-        plt.plot(MI[layer+'T'], MI[layer+'T'])
+        plt.scatter(MI[layer], MI[layer+'T'])
     plt.legend(['MINE'])
     plt.ylabel('MI(T, Y)')
     plt.xlabel('MI(X, T)')
@@ -427,6 +441,8 @@ def main():
 
     trackMI = TrackMI(args)
     mineList, mi_values = trackMI.run()
+    with open('mi_values_dict.pickle', 'wb') as handle:
+        pickle.dump(mi_values, handle, protocol=pickle.HIGHEST_PROTOCOL)
     build_information_plane(mi_values, args.epochs)
 
 if __name__ == '__main__':

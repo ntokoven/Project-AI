@@ -22,7 +22,7 @@ def change_shape(x,layer):
             layer=layer.reshape(layer.shape[0],layer.shape[1]*layer.shape[2]*layer.shape[3])
             layer=nn.Linear(layer.shape[1],x.shape[1])(layer)
     print("transformed",x.shape,layer.shape)
-    return x,layer
+    return x, layer
 
 
 dims= {'maxP1': torch.Size([64, 20, 12, 12]), 'maxP2': torch.Size([64, 50, 4, 4]),
