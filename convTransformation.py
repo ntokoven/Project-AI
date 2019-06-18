@@ -2,6 +2,32 @@ import torch
 import torch.functional as F
 import torch.nn as nn
 
+class ChangeShape(nn.Module):
+    def __init__(self):
+        super(ChangeShape, self).__init__()
+
+    def forward(self, x,layer):
+        print("orig", x.shape, layer.shape)
+        if x.shape == layer.shape:
+            return x
+        elif x.dim() == layer.dim():
+            if x.dim() == 4:
+                x = nn.Conv2d(1, 1, (x.shape[2] - layer.shape[2] + 1, x.shape[2] - layer.shape[2] + 1))(x)
+                if x.shape[1] != layer.shape[1]:
+                    noRepeat = layer.shape[1] - x.shape[1] + 1
+                    x = x.repeat(1, noRepeat, 1, 1)
+            else:
+                layer = nn.Linear(layer.shape[1], x.shape[1])(layer)
+        else:
+            if x.dim() > layer.dim():
+                x = x.reshape(x.shape[0], x.shape[1] * x.shape[2] * x.shape[3])
+                x = nn.Linear(x.shape[1], layer.shape[1])(x)
+            else:
+                layer = layer.reshape(layer.shape[0], layer.shape[1] * layer.shape[2] * layer.shape[3])
+                layer = nn.Linear(layer.shape[1], x.shape[1])(layer)
+        print("transformed", x.shape, layer.shape)
+        return x, layer
+
 def change_shape(x,layer):
     print("orig",x.shape,layer.shape)
     if x.shape==layer.shape:
@@ -43,3 +69,7 @@ a=change_shape(y,layer1)
 a=change_shape(y,layer2)
 a=change_shape(y,layer3)
 a=change_shape(y,layer4)
+
+
+cs=ChangeShape()
+cs(x,layer1)[0].shape

@@ -92,7 +92,8 @@ class MINE(nn.Module):
     def change_shape(self, x, layer):
         #x, layer = x.float(), layer.float()
         x, layer = x.to(self.device), layer.to(self.device)
-        print(x.get_device(), layer.get_device())
+        # print(x.get_device(), layer.get_device())
+
 
         #print("orig", x.shape, layer.shape)
         if x.shape == layer.shape:
@@ -104,14 +105,14 @@ class MINE(nn.Module):
                     noRepeat = layer.shape[1]-x.shape[1]+1
                     x = x.repeat(1,noRepeat,1,1)
             else:
-                layer=nn.Linear(layer.shape[1],x.shape[1])(layer)
+                layer=nn.Linear(layer.shape[1],x.shape[1]).to(self.device)(layer)
         else:
             if x.dim()>layer.dim():
                 x=x.reshape(x.shape[0],x.shape[1]*x.shape[2]*x.shape[3])
-                x=nn.Linear(x.shape[1],layer.shape[1])(x)
+                x=nn.Linear(x.shape[1],layer.shape[1]).to(self.device)(x)
             else:
                 layer=layer.reshape(layer.shape[0],layer.shape[1]*layer.shape[2]*layer.shape[3])
-                layer=nn.Linear(layer.shape[1],x.shape[1])(layer)
+                layer=nn.Linear(layer.shape[1],x.shape[1]).to(self.device)(layer)
         #print("transformed",x.shape,layer.shape)
         return x.to(self.device), layer.to(self.device)
     #'''
@@ -363,6 +364,7 @@ class TrackMI(nn.Module):
                 if step == 250:
                     break
             print('DONE')
+
 
             loss_list.append(-loss_per_epoch / len(train_loader))  # since pytorch can only minimize the return of mine is negative, we have to invert that again
             #if layer == 'sm1' and target:
