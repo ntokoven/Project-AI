@@ -19,7 +19,6 @@ class MINE(nn.Module):
         super(MINE, self).__init__()
         #print('\n\nMINE INIT\n\n')
         #self.n_input = n_input
-        #self.n_output= n_output
         a = torch.ones(shape_input)#.item())
         b = torch.ones(shape_output)#.item())
         a, b = self.change_shape(a, b)

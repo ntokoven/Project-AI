@@ -258,7 +258,7 @@ class ConvNet(nn.Module):
             '''
             Constraints the amount of data used per epoch 
             '''
-            if batch_idx == 50:
+            if batch_idx == 100:
                 break
 
     def test(self, test_loader):
@@ -363,7 +363,7 @@ class TrackMI(nn.Module):
                 step += 1
                 if step == 250:
                     break
-            print('DONE')
+            #print('DONE')
 
 
             loss_list.append(-loss_per_epoch / len(train_loader))  # since pytorch can only minimize the return of mine is negative, we have to invert that again
@@ -393,6 +393,7 @@ class TrackMI(nn.Module):
             #if mine_path == None:
             for layer in ['maxP1','maxP2','relu3','sm1']:
                 #self.mineList[layer] = 
+                continue
                 self.mi_values[layer].append(self.trainMine(self.train_loader, self.mine_epochs, self.batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer],target=False, layer=layer))
                 #self.mineList[layer+'T'] = 
                 self.mi_values[layer+'T'].append(self.trainMine(self.train_loader, self.mine_epochs, self.batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer+'T'], target=True, layer=layer))
@@ -430,9 +431,9 @@ def main():
                                 help='input batch size for training (default: 64)')
     parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
                                 help='input batch size for testing (default: 1000)')
-    parser.add_argument('--epochs', type=int, default=20, metavar='N',
+    parser.add_argument('--epochs', type=int, default=7, metavar='N',
                                 help='number of epochs to train (default: 10)')
-    parser.add_argument('--mine-epochs', type=int, default=100, metavar='N', #set to default 100
+    parser.add_argument('--mine-epochs', type=int, default=25, metavar='N', #set to default 100
                                 help='number of epochs to train MINE (default: 100)')
     parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
                                 help='learning rate (default: 0.01)')
