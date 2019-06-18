@@ -5,7 +5,7 @@ import torch.nn as nn
 def change_shape(x,layer):
     if x.shape==layer.shape:
         return x
-    elif x.dim() ==layer.dim():
+    elif x.dim() == layer.dim():
         if x.dim()==4:
             x=nn.Conv2d(1,1,(x.shape[2]-layer.shape[2]+1,x.shape[2]-layer.shape[2]+1))(x)
             if x.shape[1]!= layer.shape[1]:
