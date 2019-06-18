@@ -208,6 +208,7 @@ class ConvNet():
             loss = F.nll_loss(output, target)
             loss.backward()
             self.optimizer.step()
+
             if batch_idx % self.args.log_interval == 0:
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                     epoch, batch_idx * len(data), len(train_loader.dataset),
@@ -228,7 +229,7 @@ class ConvNet():
             for data, target in test_loader:
                 data, target = data.to(self.device), target.to(self.device)
                 output = self.model(data)
-                test_loss += F.nll_loss(output, target, reduction='sum').item()  # sum up batch loss
+                test_loss += F.nll_loss(output, target).item()  # sum up batch loss
                 pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
                 correct += pred.eq(target.view_as(pred)).sum().item()
 
@@ -292,6 +293,8 @@ class TrackMI():
         for mine_epoch in range(mine_epochs):
             loss_per_epoch = 0
             step = 0
+            prevLoss=np.inf
+            counter=0
             for batch_idx, (x, y) in tqdm(enumerate(train_loader)):
                 # x, y = x.cuda(), y.cuda()
                 model.zero_grad()
@@ -308,6 +311,11 @@ class TrackMI():
                 #print("Epoch MINE: %s. Lowerbound: %s" % (epoch, loss.item()))
                 loss.backward()
                 optimizer.step()
+                prevLoss = loss.item()
+                if -loss>-prevLoss:
+                    counter+=1
+                    if counter>2:
+                        break
                 '''
                 NEED DELETE THIS
                 Training not on full data to save development time
