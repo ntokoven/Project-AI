@@ -3,6 +3,7 @@ import torch.functional as F
 import torch.nn as nn
 
 def change_shape(x,layer):
+    print("orig",x.shape,layer.shape)
     if x.shape==layer.shape:
         return x
     elif x.dim() ==layer.dim():
@@ -20,6 +21,7 @@ def change_shape(x,layer):
         else:
             layer=layer.reshape(layer.shape[0],layer.shape[1]*layer.shape[2]*layer.shape[3])
             layer=nn.Linear(layer.shape[1],x.shape[1])(layer)
+    print("transformed",x.shape,layer.shape)
     return x,layer
 
 
