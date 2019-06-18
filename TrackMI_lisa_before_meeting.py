@@ -15,7 +15,6 @@ from tqdm import tqdm
 from collections import defaultdict
 import pickle
 import random
-import os
 
 
 class ChangeShape(nn.Module):
@@ -383,29 +382,28 @@ class TrackMI(nn.Module):
         return loss_list[-1].detach().item()
         #return model
 
-    def run(self, mine_path=None, save=True):
+    def run(self, mine_path=None, save=False):
         '''
         TODO: make use of trained MINE estimators for visualization of LeNet training process
         '''
-        if len(self.args.conv_path) == 0:
-            for epoch in range(self.args.epochs):
-                self.convN.train(self.train_loader, epoch)
-                self.convN.test(self.test_loader)
-            torch.save(self.convN.state_dict(), 'convN_%s_%s' % (self.args.epochs, self.args.batch_size))
-        else:
-            self.convN.load_state_dict(torch.load('convN_%s_%s' % (self.args.epochs, self.args.batch_size)))
-        for mine_epoch in range(self.args.mine_epochs):
+        for epoch in range(self.args.epochs):
+            self.convN.train(self.train_loader, epoch)
+            '''
+            NEED TO UNCOMMENT EVERYTHING HERE
+            '''
+            #if mine_path == None:
             for layer in ['maxP1','maxP2','relu3','sm1']:
+                #self.mineList[layer] = 
                 self.mi_values[layer].append(self.trainMine(self.train_loader, self.mine_epochs, self.batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer],target=False, layer=layer))
-                self.mi_values[layer+'T'].append(self.trainMine(self.train_loader, self.mine_epochs, self.batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer+'T'], target=True, layer=layer))
+                #self.mineList[layer+'T'] = 
+                #self.mi_values[layer+'T'].append(self.trainMine(self.train_loader, self.mine_epochs, self.batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer+'T'], target=True, layer=layer))
+                '''
+                TODO: Save trained MINE models
+                '''
                 if save == True:
-                    try:
-                        torch.save(self.mineList[layer].state_dict(), 'MINE_models/'+layer)
-                        torch.save(self.mineList[layer+'T'].state_dict(), 'MINE_models/'+layer+'T')
-                    except:
-                        os.mkdir('MINE_models') 
-                        torch.save(self.mineList[layer].state_dict(), 'MINE_models/'+layer)
-                        torch.save(self.mineList[layer+'T'].state_dict(), 'MINE_models/'+layer+'T')
+                    #torch.save(self.mineList[layer].state_dict(), 'MINE_models/'+layer)
+                    torch.save(self.mineList[layer+'T'].state_dict(), 'MINE_models/'+layer+'T')
+            self.convN.test(self.test_loader)
             write_results(self.mi_values)
         return self.mineList, self.mi_values
 
@@ -429,13 +427,13 @@ def write_results(results, filename='mi_values_dict.pickle'):
 
 def main():
     parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
-    parser.add_argument('--batch-size', type=int, default=1000, metavar='N',
-                                help='input batch size for training (default: 1000)')
+    parser.add_argument('--batch-size', type=int, default=64, metavar='N',
+                                help='input batch size for training (default: 64)')
     parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
                                 help='input batch size for testing (default: 1000)')
-    parser.add_argument('--epochs', type=int, default=20, metavar='N',
+    parser.add_argument('--epochs', type=int, default=7, metavar='N',
                                 help='number of epochs to train (default: 10)')
-    parser.add_argument('--mine-epochs', type=int, default=100, metavar='N', #set to default 100
+    parser.add_argument('--mine-epochs', type=int, default=25, metavar='N', #set to default 100
                                 help='number of epochs to train MINE (default: 100)')
     parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
                                 help='learning rate (default: 0.01)')
@@ -451,8 +449,6 @@ def main():
                                 help='For Saving the current Model')
     parser.add_argument('--mine-path', type=str, default='MINE_models',
                                 help='For Saving the current Model')
-    parser.add_argument('--conv-path', type=str, default='',
-                                help='For uploading converged ConvNet')
     args = parser.parse_args()
     args.mine_epochs
 
