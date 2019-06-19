@@ -363,7 +363,7 @@ class TrackMI(nn.Module):
                 
 
 
-            loss_list.append(-loss_per_epoch.detach() / len(train_loader))  # since pytorch can only minimize the return of mine is negative, we have to invert that again
+            loss_list.append(-loss_per_epoch.detach().item() / len(train_loader))  # since pytorch can only minimize the return of mine is negative, we have to invert that again
             #if layer == 'sm1' and target:
             print('Epoch MINE: %s. Layer: %s. Target = %s. Lowerbound: %s' % (mine_epoch, layer, target, -loss_per_epoch.detach().cpu().numpy() / len(train_loader)))
         if plot:
