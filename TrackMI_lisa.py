@@ -34,13 +34,14 @@ class MINE(nn.Module):
         self.n_input = torch.prod(torch.tensor(a.shape[1:])).item()
         self.T = nn.Sequential(
             nn.Linear(self.n_input*2, 10),
+            nn.BatchNorm1d(10),
             nn.ReLU(),
             nn.Linear(10, 1)).to(self.device)
-
+        '''
         for module in self.T.modules():
             if hasattr(module, 'weight'):
                 torch.nn.init.xavier_uniform_(module.weight)
-
+        '''
     def forward(self, x, y):
         y = y.float()
         x = x.float()
@@ -77,14 +78,9 @@ class MINE(nn.Module):
 
     def lcm(self,a, b):
         return abs(a * b) // math.gcd(a, b)
-    #'''
+
     def change_shape(self, x, layer):
-        #x, layer = x.float(), layer.float()
         x, layer = x.to(self.device), layer.to(self.device)
-        # print(x.get_device(), layer.get_device())
-
-
-        #print("orig", x.shape, layer.shape)
         if x.shape == layer.shape:
             x.to(self.device), layer.to(self.device)
         elif x.dim() == layer.dim():
@@ -102,9 +98,7 @@ class MINE(nn.Module):
             else:
                 layer=layer.reshape(layer.shape[0],layer.shape[1]*layer.shape[2]*layer.shape[3])
                 layer=nn.Linear(layer.shape[1],x.shape[1]).to(self.device)(layer)
-        #print("transformed",x.shape,layer.shape)
         return x.to(self.device), layer.to(self.device)
-    #'''
 
     #"brute-force" (every with every) version of shape transition 
     def change_shape_old(self, x, y): 
@@ -394,16 +388,20 @@ class TrackMI(nn.Module):
         else:
             self.convN.load_state_dict(torch.load(self.args.conv_path))
             self.convN.test(self.test_loader)
-        #for mine_epoch in range(self.args.mine_epochs):
-        for layer in ['maxP1','maxP2','relu3','sm1']:
+
+        if self.args.optim_layers == 'all':
+            optim_layers = ['maxP1','maxP2','relu3','sm1']
+        else:
+            optim_layers = [self.args.optim_layers]
+        for layer in optim_layers:
             self.mi_values[layer] = self.trainMine(self.mine_train_loader, self.mine_epochs, self.mine_batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer],target=False, layer=layer, method=mine_method)
             self.mi_values[layer+'T'] = self.trainMine(self.mine_train_loader, self.mine_epochs, self.mine_batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer+'T'], target=True, layer=layer, method=mine_method)
             if save == True:
                 if not os.path.exists(self.args.mine_path):
                     os.makedirs(self.args.mine_path)
-                if not os.path.exists(self.args.mine_path+'/mine_model_%s_%s_%s_%s' % (self.args.epochs, self.args.mine_epochs, self.args.batch_size, self.args.mine_lr)):
-                    os.makedirs(self.args.mine_path+'/mine_model_%s_%s_%s_%s' % (self.args.epochs, self.args.mine_epochs, self.args.batch_size, self.args.mine_lr))
-                path = self.args.mine_path+'/mine_model_%s_%s_%s_%s' % (self.args.epochs, self.args.mine_epochs, self.args.batch_size, self.args.mine_lr)
+                if not os.path.exists(self.args.mine_path+'/mine_model_%s_%s_%s_%s' % (self.args.epochs, self.args.mine_epochs, self.args.mine_batch_size, str(self.args.mine_lr).replace('.', ''))):
+                    os.makedirs(self.args.mine_path+'/mine_model_%s_%s_%s_%s' % (self.args.epochs, self.args.mine_epochs, self.args.mine_batch_size, str(self.args.mine_lr).replace('.', '')))
+                path = self.args.mine_path+'/mine_model_%s_%s_%s_%s' % (self.args.epochs, self.args.mine_epochs, self.args.mine_batch_size, str(self.args.mine_lr).replace('.', ''))
                 torch.save(self.mineList[layer].state_dict(), path+'/'+layer)
                 torch.save(self.mineList[layer+'T'].state_dict(), path+'/'+layer+'T')
             write_results(self.mi_values, self.args)
@@ -425,7 +423,7 @@ def build_information_plane(MI, epochs):
 def write_results(results, args):
     if not os.path.exists('MINE_results'):
         os.makedirs('MINE_results')
-    filename = 'MINE_results/mine_values_dict_%s_%s_%s_%s.pickle' % (args.epochs, args.mine_epochs, args.batch_size, str(args.lr).replace('.', ''))
+    filename = 'MINE_results/mine_values_dict_%s_%s_%s_%s.pickle' % (args.epochs, args.mine_epochs, args.mine_batch_size, str(args.mine_lr).replace('.', ''))
     with open(filename, 'wb') as handle:
         pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -464,6 +462,8 @@ def main():
                                 help='Lower bound estimation training method')
     parser.add_argument('--mine-optimizer', type=str, default='adam',
                                 help='Choice of optimizer for training MINE')
+    parser.add_argument('--optim-layers', type=str, default='all',
+                                help='Layers to learn MINE on (default: all)')
     args = parser.parse_args()
     #args.mine_epochs
 
