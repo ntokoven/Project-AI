@@ -18,32 +18,6 @@ import random
 import os
 
 
-class ChangeShape(nn.Module):
-    def _init_(self):
-        super(ChangeShape, self)._init_()
-
-    def forward(self, x,layer):
-        #print("orig", x.shape, layer.shape)
-        if x.shape == layer.shape:
-            return x
-        elif x.dim() == layer.dim():
-            if x.dim() == 4:
-                x = nn.Conv2d(1, 1, (x.shape[2] - layer.shape[2] + 1, x.shape[2] - layer.shape[2] + 1))(x)
-                if x.shape[1] != layer.shape[1]:
-                    noRepeat = layer.shape[1] - x.shape[1] + 1
-                    x = x.repeat(1, noRepeat, 1, 1)
-            else:
-                layer = nn.Linear(layer.shape[1], x.shape[1])(layer)
-        else:
-            if x.dim() > layer.dim():
-                x = x.reshape(x.shape[0], x.shape[1] * x.shape[2] * x.shape[3])
-                x = nn.Linear(x.shape[1], layer.shape[1])(x)
-            else:
-                layer = layer.reshape(layer.shape[0], layer.shape[1] * layer.shape[2] * layer.shape[3])
-                layer = nn.Linear(layer.shape[1], x.shape[1])(layer)
-        #print("transformed", x.shape, layer.shape)
-        return x, layer
-
 class MINE(nn.Module):
     def __init__(self, shape_input, shape_output, args):
         super(MINE, self).__init__()
@@ -81,11 +55,25 @@ class MINE(nn.Module):
 
         return T_joint, T_marginal
 
-    def lower_bound(self, x, y):
-        T_joint, T_marginal = self.forward(x, y)
-        mine = torch.mean(T_joint) - torch.log(torch.mean(torch.exp(T_marginal)))
 
+    def lower_bound(self, x, y, method = 'kl', step = 2, ema = 0):
+        T_joint, T_marginal = self.forward(x, y)
+        batch_size = x.shape[0]
+        if method == 'kl':
+            mine = torch.mean(T_joint) - torch.log(torch.mean(torch.exp(T_marginal)))
+        elif method == 'f':
+            mine = torch.mean(T_joint) - torch.mean(torch.exp(T_marginal - 1))   
+        elif method == 'ema':
+            alpha = 2 / (batch_size + 1)
+            if step == 1:
+                ema = torch.mean(torch.exp(T_marginal))
+            else:
+                ema = (1 - alpha) * ema + alpha * torch.mean(torch.exp(T_marginal)).detach()  
+            ema_normalization = (1 / ema) * torch.mean(torch.exp(T_marginal)).detach() #multiplying by detached mean to compensate the denominator after derivation of log
+            mine = torch.mean(T_joint) - ema_normalization * torch.log(torch.mean(torch.exp(T_marginal)))
+            return -mine, ema 
         return -mine
+
 
     def lcm(self,a, b):
         return abs(a * b) // math.gcd(a, b)
@@ -238,7 +226,6 @@ class ConvNet(nn.Module):
     def train(self, train_loader, epoch):
         self.model.train()
         print('Training ConvNet. Epoch: ', epoch)
-        batches_nums = random.sample(range(500), 50)
         for batch_idx, (data, target) in enumerate(train_loader):
             '''
             if batch_idx not in batches_nums:
@@ -290,6 +277,7 @@ class TrackMI(nn.Module):
         torch.manual_seed(args.seed)
         self.device = torch.device("cuda" if use_cuda else "cpu")
         self.batch_size = self.args.batch_size
+        self.mine_batch_size = self.args.mine_batch_size
         self.mine_epochs = self.args.mine_epochs
         self.convN = ConvNet(args).to(self.device)
         self.device = self.convN.device
@@ -305,6 +293,14 @@ class TrackMI(nn.Module):
                                transforms.Normalize((0.1307,), (0.3081,))
                            ])),
             batch_size=self.batch_size, shuffle=True, **kwargs)
+
+        self.mine_train_loader = torch.utils.data.DataLoader(
+            datasets.MNIST('../data', train=True, download=True,
+                           transform=transforms.Compose([
+                               transforms.ToTensor(),
+                               transforms.Normalize((0.1307,), (0.3081,))
+                           ])),
+            batch_size=self.mine_batch_size, shuffle=True, **kwargs)
 
         self.test_loader = torch.utils.data.DataLoader(
             datasets.MNIST('../data', train=False, transform=transforms.Compose([
@@ -329,9 +325,12 @@ class TrackMI(nn.Module):
 
 
     def trainMine(self, trainLoader, mine_epochs, batch_size, plot=False, convNet=None, target=False,\
-                  mineMod=None,layer=None):
+                  mineMod=None,layer=None,method='kl'):
         model = mineMod.to(self.device)
-        optimizer = optim.Adam(model.parameters(), lr=0.01)
+        if self.args.mine_optimizer == 'sgd':
+            optimizer = optim.SGD(model.parameters(), lr=self.args.mine_lr, momentum=self.args.momentum)
+        elif self.args.mine_optimizer =='adam':
+            optimizer = optim.Adam(model.parameters(), lr=self.args.mine_lr)
         train_loader = trainLoader  # becomes unstable and biased for batch_size of 100
         # Train
         loss_list = []
@@ -339,6 +338,8 @@ class TrackMI(nn.Module):
         for mine_epoch in range(mine_epochs):
             loss_per_epoch = 0
             step = 0
+            ema_step = 1
+            ema = 1.
             for batch_idx, (x, y) in tqdm(enumerate(train_loader)):
                 x, y = x.to(self.device), y.to(self.device)
                 model.zero_grad()
@@ -347,28 +348,28 @@ class TrackMI(nn.Module):
                     y_onehot = torch.FloatTensor(y.shape[0], self.num_classes).to(self.device)
                     y_onehot.zero_()
                     y_onehot.scatter_(1, y.view(y.shape[0], 1), 1)
-                    loss = model.lower_bound(y_onehot, tX)
+                    if method == 'ema':
+                        loss, ema = model.lower_bound(y_onehot, tX, method, ema, ema_step)
+                        ema_step += 1
+                    else:
+                        loss = model.lower_bound(y_onehot, tX, method)
                 else:
                     tX = convNet(x, layer).detach()
-                    loss = model.lower_bound(x, tX)
+                    if method =='ema':
+                        loss, ema = model.lower_bound(x, tX, method, ema, ema_step)
+                        ema_step += 1
+                    else:
+                        loss = model.lower_bound(x, tX, method)
                 loss_per_epoch += loss
-                #print("Epoch MINE: %s. Lowerbound: %s" % (epoch, loss.item()))
+                #print("Epoch MINE: %s. Lowerbound: %s" % (mine_epoch, loss.item()))
                 loss.backward()
                 optimizer.step()
                 
                 #############
-                '''
-                NEED DELETE THIS
-                Training not on full data to save development time
-                '''
-                step += 1
-                #
-                # if step == 100:
-                #    break
-            #print('DONE')
+                
 
 
-            loss_list.append(-loss_per_epoch / len(train_loader))  # since pytorch can only minimize the return of mine is negative, we have to invert that again
+            loss_list.append(-loss_per_epoch.detach() / len(train_loader))  # since pytorch can only minimize the return of mine is negative, we have to invert that again
             #if layer == 'sm1' and target:
             print('Epoch MINE: %s. Layer: %s. Target = %s. Lowerbound: %s' % (mine_epoch, layer, target, -loss_per_epoch.detach().cpu().numpy() / len(train_loader)))
         if plot:
@@ -380,33 +381,32 @@ class TrackMI(nn.Module):
             plt.ylabel('lower bound')
             plt.xlabel('epochs')
             plt.show()
-        return loss_list[-1].detach().item()
-        #return model
+        return loss_list
 
-    def run(self, mine_path=None, save=True):
-        '''
-        TODO: make use of trained MINE estimators for visualization of LeNet training process
-        '''
+    def run(self, mine_path=None, save=True, mine_method='kl'):
         if len(self.args.conv_path) == 0:
+            if not os.path.exists('ConvNet_models'):
+                os.makedirs('ConvNet_models')
             for epoch in range(self.args.epochs):
                 self.convN.train(self.train_loader, epoch)
                 self.convN.test(self.test_loader)
-            torch.save(self.convN.state_dict(), 'convN_%s_%s' % (self.args.epochs, self.args.batch_size))
+            torch.save(self.convN.state_dict(), 'ConvNet_models/convN_%s_%s_%s' % (self.args.epochs, self.args.batch_size, str(self.args.lr).replace('.', '')))
         else:
-            self.convN.load_state_dict(torch.load('convN_%s_%s' % (self.args.epochs, self.args.batch_size)))
-        for mine_epoch in range(self.args.mine_epochs):
-            for layer in ['maxP1','maxP2','relu3','sm1']:
-                self.mi_values[layer].append(self.trainMine(self.train_loader, self.mine_epochs, self.batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer],target=False, layer=layer))
-                self.mi_values[layer+'T'].append(self.trainMine(self.train_loader, self.mine_epochs, self.batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer+'T'], target=True, layer=layer))
-                if save == True:
-                    try:
-                        torch.save(self.mineList[layer].state_dict(), 'MINE_models/'+layer)
-                        torch.save(self.mineList[layer+'T'].state_dict(), 'MINE_models/'+layer+'T')
-                    except:
-                        os.mkdir('MINE_models') 
-                        torch.save(self.mineList[layer].state_dict(), 'MINE_models/'+layer)
-                        torch.save(self.mineList[layer+'T'].state_dict(), 'MINE_models/'+layer+'T')
-            write_results(self.mi_values)
+            self.convN.load_state_dict(torch.load(self.args.conv_path))
+            self.convN.test(self.test_loader)
+        #for mine_epoch in range(self.args.mine_epochs):
+        for layer in ['maxP1','maxP2','relu3','sm1']:
+            self.mi_values[layer] = self.trainMine(self.mine_train_loader, self.mine_epochs, self.mine_batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer],target=False, layer=layer, method=mine_method)
+            self.mi_values[layer+'T'] = self.trainMine(self.mine_train_loader, self.mine_epochs, self.mine_batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer+'T'], target=True, layer=layer, method=mine_method)
+            if save == True:
+                if not os.path.exists(self.args.mine_path):
+                    os.makedirs(self.args.mine_path)
+                if not os.path.exists(self.args.mine_path+'/mine_model_%s_%s_%s_%s' % (self.args.epochs, self.args.mine_epochs, self.args.batch_size, self.args.mine_lr)):
+                    os.makedirs(self.args.mine_path+'/mine_model_%s_%s_%s_%s' % (self.args.epochs, self.args.mine_epochs, self.args.batch_size, self.args.mine_lr))
+                path = self.args.mine_path+'/mine_model_%s_%s_%s_%s' % (self.args.epochs, self.args.mine_epochs, self.args.batch_size, self.args.mine_lr)
+                torch.save(self.mineList[layer].state_dict(), path+'/'+layer)
+                torch.save(self.mineList[layer+'T'].state_dict(), path+'/'+layer+'T')
+            write_results(self.mi_values, self.args)
         return self.mineList, self.mi_values
 
 def build_information_plane(MI, epochs):
@@ -422,15 +422,20 @@ def build_information_plane(MI, epochs):
     plt.show()
     plt.savefig('information_plane.png')
 
-def write_results(results, filename='mi_values_dict.pickle'):
+def write_results(results, args):
+    if not os.path.exists('MINE_results'):
+        os.makedirs('MINE_results')
+    filename = 'MINE_results/mine_values_dict_%s_%s_%s_%s.pickle' % (args.epochs, args.mine_epochs, args.batch_size, str(args.lr).replace('.', ''))
     with open(filename, 'wb') as handle:
         pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 def main():
     parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
-    parser.add_argument('--batch-size', type=int, default=1000, metavar='N',
-                                help='input batch size for training (default: 1000)')
+    parser.add_argument('--batch-size', type=int, default=64, metavar='N',
+                                help='input batch size for training (default: 64)')
+    parser.add_argument('--mine-batch-size', type=int, default=256, metavar='N',
+                                help='input batch size for training MINE (default: 256)')
     parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
                                 help='input batch size for testing (default: 1000)')
     parser.add_argument('--epochs', type=int, default=20, metavar='N',
@@ -439,6 +444,8 @@ def main():
                                 help='number of epochs to train MINE (default: 100)')
     parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
                                 help='learning rate (default: 0.01)')
+    parser.add_argument('--mine-lr', type=float, default=0.001, metavar='LR',
+                                help='learning rate (default: 0.001)')
     parser.add_argument('--momentum', type=float, default=0.5, metavar='M',
                                 help='SGD momentum (default: 0.5)')
     parser.add_argument('--no-cuda', action='store_true', default=False,
@@ -453,17 +460,24 @@ def main():
                                 help='For Saving the current Model')
     parser.add_argument('--conv-path', type=str, default='',
                                 help='For uploading converged ConvNet')
+    parser.add_argument('--mine-method', type=str, default='kl',
+                                help='Lower bound estimation training method')
+    parser.add_argument('--mine-optimizer', type=str, default='adam',
+                                help='Choice of optimizer for training MINE')
     args = parser.parse_args()
-    args.mine_epochs
+    #args.mine_epochs
 
     use_cuda = not args.no_cuda and torch.cuda.is_available()
     torch.manual_seed(args.seed)
     device = torch.device("cuda" if use_cuda else "cpu")
-
-
+    
+    print('Running with these parameters:')
+    print(args)
+    #for key in args.keys():
+    #   print('--%s == %s' % (key, args[key]))
 
     trackMI = TrackMI(args)#.to(device)
-    mineList, mi_values = trackMI.run()
+    mineList, mi_values = trackMI.run(mine_method=args.mine_method)
    
     #build_information_plane(mi_values, args.epochs)
 

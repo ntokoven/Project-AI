@@ -327,7 +327,10 @@ class TrackMI(nn.Module):
     def trainMine(self, trainLoader, mine_epochs, batch_size, plot=False, convNet=None, target=False,\
                   mineMod=None,layer=None,method='kl'):
         model = mineMod.to(self.device)
-        optimizer = optim.Adam(model.parameters(), lr=self.args.mine_lr)
+        if self.args.mine_optimizer == 'sgd':
+            optimizer = optim.SGD(model.parameters(), lr=self.args.mine_lr, momentum=self.args.momentum)
+        elif self.args.mine_optimizer =='adam':
+            optimizer = optim.Adam(model.parameters(), lr=self.args.mine_lr)
         train_loader = trainLoader  # becomes unstable and biased for batch_size of 100
         # Train
         loss_list = []
@@ -459,6 +462,8 @@ def main():
                                 help='For uploading converged ConvNet')
     parser.add_argument('--mine-method', type=str, default='kl',
                                 help='Lower bound estimation training method')
+    parser.add_argument('--mine-optimizer', type=str, default='adam',
+                                help='Choice of optimizer for training MINE')
     args = parser.parse_args()
     #args.mine_epochs
 
