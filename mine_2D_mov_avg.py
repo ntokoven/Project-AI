@@ -61,7 +61,7 @@ def train_MINE(data_loader, method, num_runs=1, epochs=200, lr=0.01):
 
         model.train()
         print('Run ', run)
-        ema = 1.
+        
         method = 'ema'
         if num_runs > 1:
             iterator = tqdm(range(epochs))
@@ -70,6 +70,7 @@ def train_MINE(data_loader, method, num_runs=1, epochs=200, lr=0.01):
         for epoch in iterator:
             loss_per_epoch = 0
             step = 1
+            ema = 1.
             for _, (x, y) in enumerate(data_loader):
                 #x, y = x.cuda(), y.cuda()
                 model.zero_grad()
