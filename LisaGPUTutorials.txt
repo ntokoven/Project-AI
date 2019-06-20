@@ -1,7 +1,7 @@
 connect to lisa:
 lisa.surflisa.nl
 login: lgpu0379
-password: Argyle318 
+password: Argyle318!
 
 LISA GPU TUTORIAL: PYTORCH
 ==========================
