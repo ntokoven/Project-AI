@@ -10,7 +10,7 @@ def main():
     for i in example_dict.keys():
         #for j in range(len(example_dict[i])):
         #    print(example_dict[i][j].item())# = example_dict[i][j].
-        print(i,example_dict[i])
+        print(i, example_dict[i])
 
 if __name__ == '__main__':
     # freeze_support() here if program needs to be frozen
