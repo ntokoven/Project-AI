@@ -14,12 +14,12 @@ def main():
     plt.figure(1)
     for i in example_dict.keys():
         #print(i, example_dict[i])
-        plt.plot(example_dict[i], epochs, label=i)
+        plt.plot(epochs, example_dict[i], label=i)
     plt.legend()
     plt.ylabel('epochs')
     plt.xlabel('MINE_values')
+    plt.savefig('%s.png' % args.import_path)
     plt.show()
-    plt.savefig('result.png')
 
 
 if __name__ == '__main__':
