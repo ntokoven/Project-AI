@@ -23,6 +23,7 @@ from collections import defaultdict
 import pickle
 import random
 import os
+import time
 
 
 class MINE(nn.Module):
@@ -39,7 +40,7 @@ class MINE(nn.Module):
         a, b = self.change_shape(a, b)
         self.n_input = torch.prod(torch.tensor(a.shape[1:])).item()
         self.T = nn.Sequential(
-            nn.Linear(self.n_input*2, 10),
+            nn.Linear(2 * self.n_input, 10),
             nn.BatchNorm1d(10),
             nn.ReLU(),
             nn.Linear(10, 1)).to(self.device)
@@ -48,13 +49,11 @@ class MINE(nn.Module):
             if hasattr(module, 'weight'):
                 torch.nn.init.xavier_uniform_(module.weight)
         '''
-    def forward(self, x, y, target=False):
+    def forward(self, x, y):
         y = y.float()
         x = x.float()
         batch_size = x.shape[0]
-        if not target:
-            y += 2 * torch.randn(y.shape).to(self.device).detach()
-        x, y = self.change_shape(x, y, target)
+        x, y = self.change_shape(x, y)
         input_size = torch.prod(torch.tensor(x.shape[1:])).item()
         x, y = x.reshape((batch_size, input_size)), \
                y.reshape((batch_size, input_size))
@@ -65,8 +64,8 @@ class MINE(nn.Module):
         return T_joint, T_marginal
 
 
-    def lower_bound(self, x, y, method = 'kl', step = 2, ema = 0, target=False):
-        T_joint, T_marginal = self.forward(x, y, target)
+    def lower_bound(self, x, y, method = 'kl', step = 2, ema = 0):
+        T_joint, T_marginal = self.forward(x, y)
         batch_size = x.shape[0]
         if method == 'kl':
             mine = torch.mean(T_joint) - torch.log(torch.mean(torch.exp(T_marginal)))
@@ -83,36 +82,30 @@ class MINE(nn.Module):
             return -mine, ema 
         return -mine
 
-    def change_shape_new(self, x, layer):
-        layer = layer.reshape(int(torch.tensor(layer.shape[0])), int(torch.prod(torch.tensor(layer.shape[1:]))))
-        x = x.reshape(int(torch.tensor(x.shape[0])), int(torch.prod(torch.tensor(x.shape[1:]))))
-        # x, layer = x.to(self.device), layer.to(self.device)
-        x = nn.ReLU().to(self.device)(nn.Linear(x.shape[1], layer.shape[1]).to(self.device)(x))
-        return x, layer
-
-    def change_shape_new_old(self, x, layer):
+    def change_shape(self, x, layer):
         x, layer = x.to(self.device), layer.to(self.device)
         if x.shape == layer.shape:
-            x.to(self.device), layer.to(self.device)
+            return x.to(self.device), layer.to(self.device)
         elif x.dim() == layer.dim():
             if x.dim() == 4:
-                x = nn.Conv2d(1, 1, (x.shape[2] - layer.shape[2] + 1, x.shape[2] - layer.shape[2] + 1)).to(self.device)(x)
+                x = nn.Conv2d(1, 1, (x.shape[2]-layer.shape[2]+1,x.shape[2]-layer.shape[2]+1)).to(self.device)(x)
                 if x.shape[1] != layer.shape[1]:
                     noRepeat = layer.shape[1]-x.shape[1]+1
-                    x = x.repeat(1, noRepeat, 1, 1)
+                    x = x.repeat(1,noRepeat,1,1)
                 x = nn.ReLU().to(self.device)(x)
                 x = nn.MaxPool2d(2, 2).to(self.device)(x)
             else:
-                layer = nn.Linear(layer.shape[1], x.shape[1]).to(self.device)(layer)
-                layer = nn.ReLU().to(self.device)(layer)
+                x = nn.Linear(x.shape[1],layer.shape[1]).to(self.device)(x)
+                x = nn.ReLU().to(self.device)(x)
         else:
             if x.dim() > layer.dim():
-                x = x.reshape(x.shape[0], torch.prod(torch.tensor(x.shape[1:])))
+                x = x.reshape(x.shape[0],x.shape[1]*x.shape[2]*x.shape[3])
                 x = nn.Linear(x.shape[1],layer.shape[1]).to(self.device)(x)
                 x = nn.ReLU().to(self.device)(x)
             else:
-                layer = layer.reshape(layer.shape[0], torch.prod(torch.tensor(layer.shape[1:])))
-                layer = nn.Linear(layer.shape[1], x.shape[1]).to(self.device)(layer)
+                layer = layer.reshape(layer.shape[0],layer.shape[1]*layer.shape[2]*layer.shape[3])
+                layer = nn.Linear(layer.shape[1],x.shape[1]).to(self.device)(layer)
+                layer = nn.ReLU().to(self.device)(layer)
         return x.to(self.device), layer.to(self.device)
 
     #"brute-force" (every with every) version of shape transition 
@@ -140,9 +133,9 @@ class MINE(nn.Module):
         return x, y
 
 
-class LeNet(nn.Module):
+class MLP(nn.Module):
     def __init__(self, args):
-        super(LeNet, self).__init__()
+        super(MLP, self).__init__()
         self.args = args
 
         use_cuda = not self.args.no_cuda and torch.cuda.is_available()
@@ -151,41 +144,29 @@ class LeNet(nn.Module):
 
         self.moduleList = {}
 
-        self.conv1 = nn.Conv2d(1, 20, 5, 1)
-        self.moduleList["conv1"] = self.conv1
+        self.fc1 = nn.Linear(784, 512).to(self.device)#Conv2d(1, 20, 5, 1)
+        self.moduleList["fc1"] = self.fc1
 
-        self.relu1 = nn.ReLU()
+        self.relu1 = nn.ReLU().to(self.device)
         self.moduleList["relu1"]= self.relu1
 
-        self.maxP1 = nn.MaxPool2d(2,2)
-        self.moduleList['maxP1'] = self.maxP1
-
-        self.conv2 = nn.Conv2d(20, 50, 5, 1)
-        self.moduleList['conv2'] = self.conv2
-
-        self.relu2= nn.ReLU()
-        self.moduleList['relu2'] = self.relu2
-
-        self.maxP2 = nn.MaxPool2d(2,2)
-        self.moduleList['maxP2'] = self.maxP2
-
-        self.fc1 = nn.Linear(4 * 4 * 50, 500)
-        self.moduleList['fc1'] = self.fc1
-
-        self.relu3 = nn.ReLU()
-        self.moduleList['relu3'] = self.relu3
-
-        self.fc2 = nn.Linear(500, 10)
+        self.fc2 = nn.Linear(512, 512).to(self.device)#nn.Conv2d(20, 50, 5, 1)
         self.moduleList['fc2'] = self.fc2
 
-        self.sm1 = nn.LogSoftmax(dim=1)
+        self.relu2= nn.ReLU().to(self.device)
+        self.moduleList['relu2'] = self.relu2
+
+        self.fc2 = nn.Linear(512, 10).to(self.device)
+        self.moduleList['fc2'] = self.fc2
+
+        self.sm1 = nn.LogSoftmax(dim=1).to(self.device)
         self.moduleList['sm1'] = self.sm1
 
     def forward(self, x, exitLayer=None):
         x = x.to(self.device)
         for layer in self.moduleList.keys():
-            if layer == 'fc1':
-                x = x.view(-1, 4 * 4 * 50)
+            #if layer == 'fc1':
+            #    x = x.view(-1, 4 * 4 * 50)
             x = self.moduleList[layer](x)
             if type(exitLayer) != 'NoneType':
                 if layer == exitLayer:
@@ -194,23 +175,22 @@ class LeNet(nn.Module):
 
     def get_dims(self, x):
         x = x.to(self.device)
+        x = x.view(x.shape[0], torch.prod(torch.tensor(x.shape[1:])).item())
         with torch.no_grad():
             dims = {}
             for layer in self.moduleList.keys():
-                if layer == 'fc1':
-                    x = x.view(-1, 4 * 4 * 50)
+                #if layer == 'fc1':
+                #    x = x.view(-1, 4 * 4 * 50)
                 x = self.moduleList[layer](x).to(self.device)
-                if layer == 'maxP1':
-                    dims['maxP1'] = x.shape
-                elif layer == 'maxP2':
-                    dims['maxP2'] = x.shape
-                elif layer =='relu3':
-                    dims['relu3'] = x.shape
+                if layer == 'relu1':
+                    dims['relu1'] = x.shape
+                elif layer == 'relu2':
+                    dims['relu2'] = x.shape
                 elif layer == 'sm1':
                     dims['sm1'] = x.shape
         return dims
 
-#Class for training and evaluating the target network
+#Class for training and evaluating of target network
 class ConvNet(nn.Module):
     def __init__(self, args):
         super(ConvNet, self).__init__()
@@ -223,16 +203,21 @@ class ConvNet(nn.Module):
 
         kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
 
-        self.model = LeNet(args).to(self.device)
+        self.model = MLP(args).to(self.device)
+        model_parameters = filter(lambda p: p.requires_grad, self.model.parameters())
+        params = sum([np.prod(p.size()) for p in model_parameters])
+        
+        print('NUM PARAMETERS', params)
         self.optimizer = optim.SGD(self.model.parameters(), lr=self.args.lr, momentum=self.args.momentum)
 
     def train(self, train_loader, epoch):
         self.model.train()
         print('Training ConvNet. Epoch: ', epoch)
+        start = time.time()
         for batch_idx, (data, target) in enumerate(train_loader):
             
             data, target = data.to(self.device), target.to(self.device)
-            
+            data = data.view(data.shape[0], torch.prod(torch.tensor(data.shape[1:])).item())
             self.optimizer.zero_grad()
             output = self.model(data)
             loss = F.nll_loss(output, target)
@@ -242,11 +227,14 @@ class ConvNet(nn.Module):
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                     epoch, batch_idx * len(data), len(train_loader.dataset),
                            100. * batch_idx / len(train_loader), loss.item()))
+            
             '''
             Constraints the amount of data used per epoch 
             '''
             #if batch_idx == 100:
             #   break
+        print('Time per epoch %s: %s' % (epoch, time.time() - start))
+        
 
     def test(self, test_loader):
         self.model.eval()
@@ -256,6 +244,7 @@ class ConvNet(nn.Module):
         with torch.no_grad():
             for data, target in test_loader:
                 data, target = data.to(self.device), target.to(self.device)
+                data = data.view(data.shape[0], torch.prod(torch.tensor(data.shape[1:])).item())
                 output = self.model(data)
                 test_loss += F.nll_loss(output, target, reduction='sum').item()  # sum up batch loss
                 pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
@@ -317,7 +306,7 @@ class TrackMI(nn.Module):
         self.mineList = {}
     
         self.mi_values = defaultdict(list)
-        for layer in ['maxP1','maxP2','relu3','sm1']:
+        for layer in ['relu1', 'relu2', 'sm1']:
             self.mineList[layer] = MINE(self.dimensions['input'], self.dimensions[layer], self.args).to(self.device)
             self.mineList[layer+'T'] = MINE(self.dimensions['target'], self.dimensions[layer], self.args).to(self.device)
             
@@ -334,12 +323,14 @@ class TrackMI(nn.Module):
         # Train
         loss_list = []
         for mine_epoch in range(mine_epochs):
+            start = time.time()
             loss_per_epoch = 0
             step = 0
             ema_step = 1
             ema = 1.
             for batch_idx, (x, y) in tqdm(enumerate(train_loader)):
                 x, y = x.to(self.device), y.to(self.device)
+                x = x.view(x.shape[0], torch.prod(torch.tensor(x.shape[1:])).item())
                 model.zero_grad()
                 if target:
                     tX = convNet(x, layer).detach()
@@ -347,23 +338,25 @@ class TrackMI(nn.Module):
                     y_onehot.zero_()
                     y_onehot.scatter_(1, y.view(y.shape[0], 1), 1)
                     if method == 'ema':
-                        loss, ema = model.lower_bound(y_onehot, tX, method, ema, ema_step, target=target)
+                        loss, ema = model.lower_bound(y_onehot, tX, method, ema, ema_step)
                         ema_step += 1
                     else:
-                        loss = model.lower_bound(y_onehot, tX, method, target=target)
+                        loss = model.lower_bound(y_onehot, tX, method)
                 else:
                     tX = convNet(x, layer).detach()
                     if method =='ema':
-                        loss, ema = model.lower_bound(x, tX, method, ema, ema_step, target=target)
+                        loss, ema = model.lower_bound(x, tX, method, ema, ema_step)
                         ema_step += 1
                     else:
-                        loss = model.lower_bound(x, tX, method, target=target)
+                        loss = model.lower_bound(x, tX, method)
                 loss_per_epoch += loss
                 loss.backward()
                 optimizer.step()
                 
             loss_list.append(-loss_per_epoch.detach().item() / len(train_loader))  # since pytorch can only minimize the return of mine is negative, we have to invert that again
             print('Epoch MINE: %s. Layer: %s. Target = %s. Lowerbound: %s' % (mine_epoch, layer, target, -loss_per_epoch.detach().cpu().numpy() / len(train_loader)))
+            print('Time per epoch %s: %s' % (mine_epoch, time.time() - start))
+        
         if plot:
             # Plot
             mine_epochs = np.arange(1, mine_epochs + 1)
@@ -388,13 +381,13 @@ class TrackMI(nn.Module):
             self.convN.test(self.test_loader)
 
         if self.args.optim_layers == 'all':
-            optim_layers = ['maxP1','maxP2','relu3','sm1']
+            optim_layers = ['relu1', 'relu2', 'sm1']#['maxP1','maxP2','relu3','sm1']
         else:
             optim_layers = [self.args.optim_layers]
         for layer in optim_layers:
             #if training MINE after every epoch of training LeNet,
             #append but not assign to mi_values
-            self.mi_values[layer] = self.trainMine(self.mine_train_loader, self.mine_epochs, self.mine_batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer],target=False, layer=layer, method=mine_method)
+            self.mi_values[layer] = self.trainMine(self.mine_train_loader, self.mine_epochs, self.mine_batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer], target=False, layer=layer, method=mine_method)
             self.mi_values[layer+'T'] = self.trainMine(self.mine_train_loader, self.mine_epochs, self.mine_batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer+'T'], target=True, layer=layer, method=mine_method)
             if save == True:
                 if not os.path.exists(self.args.mine_path):

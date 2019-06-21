@@ -13,12 +13,14 @@ from collections import defaultdict
 
 
 class MINE(nn.Module):
-    def __init__(self):
+    def __init__(self, dim):
         super(MINE, self).__init__()
 
         self.T = nn.Sequential(
-            nn.Linear(4, 10),
+            nn.Linear(2 * dim, 10),
             nn.ReLU(),
+            #nn.Linear(1000, 10),
+            #nn.ReLU(),
             nn.Linear(10, 1))
 
         for module in self.T.modules():
@@ -49,18 +51,17 @@ class MINE(nn.Module):
             return -mine, ema 
         return -mine
 
-def train_MINE(data_loader, method, num_runs=1, epochs=200, lr=0.01):
+def train_MINE(data_loader, method, dim, num_runs=1, epochs=200, lr=0.01):
     for run in range(num_runs):
         print('\n\nMethod - %s. Run - %s' % (method, run))
         # Model and optimizer
-        model = MINE()#.cuda()
+        model = MINE(dim)#.cuda()
         optimizer = optim.Adam(model.parameters(), lr=0.01)
         
         # Train
         loss_list = []
 
         model.train()
-        print('Run ', run)
         
         method = 'ema'
         if num_runs > 1:
@@ -93,27 +94,32 @@ def train_MINE(data_loader, method, num_runs=1, epochs=200, lr=0.01):
 
 # Create data
 N = 10000
-data = np.random.randn(4, N)
+dim = 10
+data = np.random.randn(2 * dim, N)
 
 # Set covariance = A A^T
-A = np.eye(4)
+A = np.eye(2 * dim)
 A[0, 2] = 3
 A[0, 3] = 0
 A[1, 2] = 0
 A[1, 3] = 9
 
+A = (np.random.randint(1, 10, size=(2 * dim, 2 * dim)) * np.tri(2 * dim)).T
+print(A)
 # Introduce correlation
 data = A @ data
 
 # Split into x and y
-data_x = data[:2, :].T
-data_y = data[2:, :].T
+data_x = data[:dim, :].T
+data_y = data[dim:, :].T
 
 # Compute MI using: MI(Y, X) = H(Y) + H(X) - H(X,Y)
 cov = A @ A.T
-N_x = torch.distributions.multivariate_normal.MultivariateNormal(torch.zeros(2), torch.from_numpy(cov[:2, :2]))
-N_y = torch.distributions.multivariate_normal.MultivariateNormal(torch.zeros(2), torch.from_numpy(cov[2:, 2:]))
-N_x_y = torch.distributions.multivariate_normal.MultivariateNormal(torch.zeros(4), torch.from_numpy(cov))
+#cov = (B + B.T)/2
+print(cov)
+N_x = torch.distributions.multivariate_normal.MultivariateNormal(torch.zeros(dim), torch.from_numpy(cov[:dim, :dim]))
+N_y = torch.distributions.multivariate_normal.MultivariateNormal(torch.zeros(dim), torch.from_numpy(cov[dim:, dim:]))
+N_x_y = torch.distributions.multivariate_normal.MultivariateNormal(torch.zeros(2 * dim), torch.from_numpy(cov))
 
 MI = N_x.entropy().numpy() + N_y.entropy().numpy() - N_x_y.entropy().numpy()
 print('True value of Mutual Information - ', MI)
@@ -125,12 +131,12 @@ train = data_utils.TensorDataset(torch.from_numpy(data_x).float(),
                                 torch.from_numpy(data_y).float())
 train_loader = data_utils.DataLoader(train, batch_size=batch_size, shuffle=True, **kwargs) # becomes unstable and biased for batch_size of 100
 
-methods = ['kl', 'f', 'ema']
-epochs = 200
+methods = ['kl']#kl', 'f', 'ema']
+epochs = 2000
 loss_track = defaultdict(list)
 models = defaultdict()
 for method in methods:
-    models[method], loss_track[method] = train_MINE(train_loader, method, epochs=epochs)
+    models[method], loss_track[method] = train_MINE(train_loader, method, dim, epochs=epochs)
 # Plot
 epochs = np.arange(1, epochs + 1)
 MI = np.repeat(MI, len(epochs))
