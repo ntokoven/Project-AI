@@ -16,8 +16,8 @@ def main():
         #print(i, example_dict[i])
         plt.plot(epochs, example_dict[i], label=i)
     plt.legend()
-    plt.ylabel('epochs')
-    plt.xlabel('MINE_values')
+    plt.ylabel('MI(x, L_i + eps)')
+    plt.xlabel('MINE epochs')
     plt.savefig('%s.png' % args.import_path)
     plt.show()
 
