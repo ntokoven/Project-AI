@@ -19,7 +19,7 @@ import os
 
 
 class MINE(nn.Module):
-    def __init__(self, shape_input, shape_output, args,target=False):
+    def __init__(self, shape_input, shape_output, args, target=False):
         super(MINE, self).__init__()
 
         self.args = args
@@ -32,7 +32,7 @@ class MINE(nn.Module):
         self.n_input = torch.prod(torch.tensor(a.shape[1:])).item()
         if not target:
             self.T = nn.Sequential(
-                nn.Linear(self.n_input*2, 10),
+                nn.Linear(self.n_input * 2, 10),
                 nn.ReLU(),
                 nn.Linear(10, 1)).to(self.device)
         if target:
@@ -46,7 +46,7 @@ class MINE(nn.Module):
             if hasattr(module, 'weight'):
                 torch.nn.init.xavier_uniform_(module.weight)
         '''
-    def forward(self, x, y,target):
+    def forward(self, x, y, target):
         y = y.float()
         x = x.float()
         batch_size = x.shape[0]
@@ -59,7 +59,7 @@ class MINE(nn.Module):
 
 
     def lower_bound(self, x, y, method = 'kl', step = 2, ema = 0, target=True):
-        T_joint, T_marginal = self.forward(x, y,target)
+        T_joint, T_marginal = self.forward(x, y, target)
         batch_size = x.shape[0]
         if method == 'kl':
             mine = torch.mean(T_joint) - torch.log(torch.mean(torch.exp(T_marginal)))
@@ -171,9 +171,6 @@ class LeNet(nn.Module):
             if type(exitLayer) != 'NoneType':
                 if layer == exitLayer:
                     break
-            #if layer == 'fc2':
-            #    x = self.sm1(x)
-            #    break
         return x
 
     def get_dims(self, x):
@@ -185,11 +182,11 @@ class LeNet(nn.Module):
                     x = x.view(-1, 4 * 4 * 50)
                 x = self.moduleList[layer](x).to(self.device)
                 if layer == 'maxP1':
-                    dims['maxP1'] = x.shape#torch.prod(torch.tensor(x.shape))
+                    dims['maxP1'] = x.shape
                 elif layer == 'maxP2':
-                    dims['maxP2'] = x.shape#torch.prod(torch.tensor(x.shape[1:]))
+                    dims['maxP2'] = x.shape
                 elif layer =='relu3':
-                    dims['relu3'] = x.shape#torch.prod(torch.tensor(x.shape[1:]))
+                    dims['relu3'] = x.shape
                 elif layer == 'sm1':
                     dims['sm1'] = x.shape
         return dims
@@ -214,11 +211,6 @@ class ConvNet(nn.Module):
         self.model.train()
         print('Training ConvNet. Epoch: ', epoch)
         for batch_idx, (data, target) in enumerate(train_loader):
-            '''
-            if batch_idx not in batches_nums:
-                continue
-            else:
-            '''
             data, target = data.to(self.device), target.to(self.device)
             
             self.optimizer.zero_grad()
@@ -312,7 +304,7 @@ class TrackMI(nn.Module):
 
 
     def trainMine(self, trainLoader, mine_epochs, batch_size, plot=False, convNet=None, target=False,\
-                  mineMod=None,layer=None,method='kl'):
+                  mineMod=None, layer=None, method='kl'):
         model = mineMod.to(self.device)
         if self.args.mine_optimizer == 'sgd':
             optimizer = optim.SGD(model.parameters(), lr=self.args.mine_lr, momentum=self.args.momentum)
@@ -359,7 +351,7 @@ class TrackMI(nn.Module):
 
             loss_list.append(-loss_per_epoch.detach().item() / len(train_loader))  # since pytorch can only minimize the return of mine is negative, we have to invert that again
             #if layer == 'sm1' and target:
-            print('Epoch MINE: %s. Layer: %s. Target = %s. Lowerbound: %s' % (mine_epoch, layer, target, -loss_per_epoch.detach().cpu().numpy() / len(train_loader)))
+            print('Epoch MINE: %s. Layer: %s. Target: %s. Lowerbound: %s' % (mine_epoch, layer, target, -loss_per_epoch.detach().cpu().numpy() / len(train_loader)))
         if plot:
             # Plot
             mine_epochs = np.arange(1, mine_epochs + 1)
@@ -426,7 +418,7 @@ def build_information_plane(MI, epochs):
 def write_results(results, args):
     if not os.path.exists('MINE_results'):
         os.makedirs('MINE_results')
-    filename = 'MINE_results/mine_values_dict_%s_%s_%s_%s.pickle' % (args.epochs, args.mine_epochs, args.mine_batch_size, str(args.mine_lr).replace('.', ''))
+    filename = 'MINE_results/mine_values_dict_%s_%s_%s_%s.pickle' % (args.comment, args.mine_epochs, args.mine_batch_size, str(args.mine_lr).replace('.', ''))
     with open(filename, 'wb') as handle:
         pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -467,8 +459,9 @@ def main():
                                 help='Choice of optimizer for training MINE')
     parser.add_argument('--optim-layers', type=str, default='all',
                                 help='Layers to learn MINE on (default: all)')
+    parser.add_argument('--comment', type=str, default='',
+                                help='Any additional comments')
     args = parser.parse_args()
-    #args.mine_epochs
 
     use_cuda = not args.no_cuda and torch.cuda.is_available()
     torch.manual_seed(args.seed)
@@ -476,8 +469,6 @@ def main():
     
     print('Running with these parameters:')
     print(args)
-    #for key in args.keys():
-    #   print('--%s == %s' % (key, args[key]))
 
     trackMI = TrackMI(args)#.to(device)
     mineList, mi_values = trackMI.run(mine_method=args.mine_method)
