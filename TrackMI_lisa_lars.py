@@ -19,23 +19,28 @@ import os
 
 
 class MINE(nn.Module):
-    def __init__(self, shape_input, shape_output, args):
+    def __init__(self, shape_input, shape_output, args,target=False):
         super(MINE, self).__init__()
 
         self.args = args
         use_cuda = not self.args.no_cuda and torch.cuda.is_available()
         torch.manual_seed(self.args.seed)
         self.device = torch.device("cuda" if use_cuda else "cpu")
-
-        #self.change_shape = ChangeShape().to(self.device)
         a = torch.ones(shape_input).to(self.device)#.item())
         b = torch.ones(shape_output).to(self.device)#.item())
         a, b = self.change_shape(a, b,True)
         self.n_input = torch.prod(torch.tensor(a.shape[1:])).item()
-        self.T = nn.Sequential(
-            nn.Linear(self.n_input*2, 10),
-            nn.ReLU(),
-            nn.Linear(10, 1)).to(self.device)
+        if not target:
+            self.T = nn.Sequential(
+                nn.Linear(self.n_input*2, 10),
+                nn.ReLU(),
+                nn.Linear(10, 1)).to(self.device)
+        if target:
+            self.T = nn.Sequential(
+                nn.Linear(self.n_input * 2, 10),
+                nn.BatchNorm1d(10),
+                nn.ReLU(),
+                nn.Linear(10, 1)).to(self.device)
         '''
         for module in self.T.modules():
             if hasattr(module, 'weight'):
@@ -46,9 +51,6 @@ class MINE(nn.Module):
         x = x.float()
         batch_size = x.shape[0]
         x, y = self.change_shape(x, y,target)
-        # input_size = torch.prod(torch.tensor(x.shape[1:])).item()
-        # x, y = x.reshape((batch_size, input_size)), \
-        #        y.reshape((batch_size, input_size))
         y_shuffled = y[torch.randperm(y.size()[0])]
         T_joint = self.T(torch.cat((x, y), dim=1))
         T_marginal = self.T(torch.cat((x, y_shuffled), dim=1))
@@ -78,41 +80,16 @@ class MINE(nn.Module):
     def lcm(self,a, b):
         return abs(a * b) // math.gcd(a, b)
 
-    # def change_shape(self, x, layer):
-    #     x, layer = x.to(self.device), layer.to(self.device)
-    #     if x.shape == layer.shape:
-    #         x.to(self.device), layer.to(self.device)
-    #     elif x.dim() == layer.dim():
-    #         if x.dim() == 4:
-    #             x = nn.Conv2d(1, 1, (x.shape[2]-layer.shape[2]+1,x.shape[2]-layer.shape[2]+1)).to(self.device)(x)
-    #             if x.shape[1] != layer.shape[1]:
-    #                 noRepeat = layer.shape[1]-x.shape[1]+1
-    #                 x = x.repeat(1,noRepeat,1,1)
-    #         else:
-    #             layer=nn.Linear(layer.shape[1],x.shape[1]).to(self.device)(layer)
-    #     else:
-    #         if x.dim()>layer.dim():
-    #             x=x.reshape(x.shape[0],x.shape[1]*x.shape[2]*x.shape[3])
-    #             x=nn.Linear(x.shape[1],layer.shape[1]).to(self.device)(x)
-    #         else:
-    #             layer=layer.reshape(layer.shape[0],layer.shape[1]*layer.shape[2]*layer.shape[3])
-    #             layer=nn.Linear(layer.shape[1],x.shape[1]).to(self.device)(layer)
-    #     return x.to(self.device), layer.to(self.device)
     def change_shape(self,x, layer,target):
         if not target:
             layer=layer+(torch.randn(layer.shape).to(self.device).detach()*2)
-            print("transformation is done")
-        # print(torch.prod(torch.tensor(layer.shape[1:])))
         layer = layer.reshape(int(torch.tensor(layer.shape[0])), int(torch.prod(torch.tensor(layer.shape[1:]))))
         x = x.reshape(int(torch.tensor(x.shape[0])), int(torch.prod(torch.tensor(x.shape[1:]))))
-        # x, layer = x.to(self.device), layer.to(self.device)
         if not target:
             x = nn.ReLU().to(self.device)(nn.Linear(x.shape[1], layer.shape[1]).to(self.device)(x))
         else:
-
-            # layer=nn.ReLU().to(self.device)(nn.Linear(layer.shape[1], x.shape[1]*2).to(self.device)(layer))
-            layer = nn.ReLU().to(self.device)(nn.Linear(layer.shape[1],x.shape[1], ).to(self.device)(layer))
-            # layer = nn.ReLU().to(self.device)(layer)
+            layer = layer + (torch.randn(layer.shape).to(self.device).detach() * 2)
+            layer=nn.ReLU().to(self.device)(nn.Linear(layer.shape[1],x.shape[1]).to(self.device)(layer))
 
         return x,layer
 
@@ -330,7 +307,7 @@ class TrackMI(nn.Module):
         self.mi_values = defaultdict(list)
         for layer in ['maxP1','maxP2','relu3','sm1']:
             self.mineList[layer] = MINE(self.dimensions['input'], self.dimensions[layer], self.args).to(self.device)
-            self.mineList[layer+'T'] = MINE(self.dimensions['target'], self.dimensions[layer], self.args).to(self.device)
+            self.mineList[layer+'T'] = MINE(self.dimensions['target'], self.dimensions[layer], self.args,target=True).to(self.device)
             
 
 
@@ -411,11 +388,12 @@ class TrackMI(nn.Module):
         else:
             optim_layers = [self.args.optim_layers]
         for layer in optim_layers:
+            self.mi_values[layer] = self.trainMine(self.mine_train_loader, self.mine_epochs, self.mine_batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer],target=False, layer=layer, method=mine_method)
+
             self.mi_values[layer + 'T'] = self.trainMine(self.mine_train_loader, self.mine_epochs, self.mine_batch_size,
                                                          plot=False, convNet=self.convN.model,
                                                          mineMod=self.mineList[layer + 'T'], target=True, layer=layer,
                                                          method=mine_method)
-            self.mi_values[layer] = self.trainMine(self.mine_train_loader, self.mine_epochs, self.mine_batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer],target=False, layer=layer, method=mine_method)
 
 
 
