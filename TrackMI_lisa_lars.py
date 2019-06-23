@@ -388,12 +388,13 @@ class TrackMI(nn.Module):
         else:
             optim_layers = [self.args.optim_layers]
         for layer in optim_layers:
-            self.mi_values[layer] = self.trainMine(self.mine_train_loader, self.mine_epochs, self.mine_batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer],target=False, layer=layer, method=mine_method)
 
             self.mi_values[layer + 'T'] = self.trainMine(self.mine_train_loader, self.mine_epochs, self.mine_batch_size,
                                                          plot=False, convNet=self.convN.model,
                                                          mineMod=self.mineList[layer + 'T'], target=True, layer=layer,
                                                          method=mine_method)
+
+            self.mi_values[layer] = self.trainMine(self.mine_train_loader, self.mine_epochs, self.mine_batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer],target=False, layer=layer, method=mine_method)
 
 
 
