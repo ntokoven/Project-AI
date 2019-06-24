@@ -58,7 +58,6 @@ class MINE(nn.Module):
 
         return T_joint, T_marginal
 
-
     def lower_bound(self, x, y, method = 'kl', step = 2, ema = 0, target=True):
         T_joint, T_marginal = self.forward(x, y, target)
         batch_size = x.shape[0]
@@ -77,51 +76,20 @@ class MINE(nn.Module):
             return -mine, ema 
         return -mine
 
-
-    def lcm(self,a, b):
-        return abs(a * b) // math.gcd(a, b)
-
     def change_shape(self,x, layer,target=False):
         if not target:
-            layer=layer+(torch.randn(layer.shape).to(self.device).detach()*2)
-            # print("noise is added")
+            layer += 2 * torch.randn(layer.shape).to(self.device).detach()
         layer = layer.reshape(int(torch.tensor(layer.shape[0])), int(torch.prod(torch.tensor(layer.shape[1:]))))
         x = x.reshape(int(torch.tensor(x.shape[0])), int(torch.prod(torch.tensor(x.shape[1:]))))
         if not target:
             x = nn.ReLU().to(self.device)(nn.Linear(x.shape[1], layer.shape[1]).to(self.device)(x))
-            # print("shape after transfer",x.shape,layer.shape)
         # else:
         #     layer = layer + (torch.randn(layer.shape).to(self.device).detach() * 1)
         #     layer=nn.ReLU().to(self.device)(nn.Linear(layer.shape[1],x.shape[1]).to(self.device)(layer))
 
         return x,layer
 
-    #"brute-force" (every with every) version of shape transition
-    def change_shape_old(self, x, y):
-        #print('Shapes ot T input:')
-        #print(x.shape)
-        #print(y.shape,'\n\n\n')
-        '''
-        Change to convolutions
-        '''
-        n = abs(x.dim() - y.dim())
-        if x.dim() > y.dim():
-            for i in range(n):
-                y = torch.unsqueeze(torch.tensor(y), 1).clone().detach().requires_grad_(True)
-        elif x.dim() < y.dim():
-            for i in range(n):
-                x = torch.unsqueeze(torch.tensor(x), 1).clone().detach().requires_grad_(True)
-        desired_shape = []
-        for i in range(x.dim()):
-            desired_shape.append(self.lcm(x.shape[i], y.shape[i]))
-        d = 1
-        for shape in desired_shape:
-            d *= shape
-        xresh=x.reshape(int(torch.prod(torch.tensor(x.shape[0:]))))
-        yresh=y.reshape(int(torch.prod(torch.tensor(y.shape[0:]))))
-        x = xresh.repeat(d // xresh.shape[0]).reshape(desired_shape)
-        y = yresh.repeat(d // yresh.shape[0]).reshape(desired_shape)
-        return x, y
+
 
 
 class LeNet(nn.Module):
@@ -400,7 +368,7 @@ class TrackMI(nn.Module):
                     if self.args.run_target == 'True':
                         mine_model = MINE(self.dimensions['target'], self.dimensions[layer], self.args).to(self.device)
                         self.mi_values[layer + 'T'].append(self.trainMine(self.mine_train_loader, mine_ep, self.mine_batch_size,
-                                                                        plot=False, convNet=self.convN.model, mineMod=self.mineList[layer + 'T'],
+                                                                        plot=False, convNet=self.convN.model, mineMod=mine_model,
                                                                         target=True, layer=layer, method=mine_method))
                     if self.args.run_input == 'True':
                         mine_model = MINE(self.dimensions['input'], self.dimensions[layer], self.args).to(self.device)
@@ -456,8 +424,8 @@ def main():
                                 help='number of epochs to train (default: 10)')
     parser.add_argument('--mine-epochs', type=int, default=100, metavar='N', #set to default 100
                                 help='number of epochs to train MINE (default: 100)')
-    parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
-                                help='learning rate (default: 0.01)')
+    parser.add_argument('--lr', type=float, default=0.0003, metavar='LR',
+                                help='learning rate (default: 0.0003)')
     parser.add_argument('--mine-lr', type=float, default=0.001, metavar='LR',
                                 help='learning rate (default: 0.001)')
     parser.add_argument('--momentum', type=float, default=0.5, metavar='M',
