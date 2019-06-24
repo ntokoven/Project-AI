@@ -28,18 +28,17 @@ class MINE(nn.Module):
         self.device = torch.device("cuda" if use_cuda else "cpu")
         a = torch.ones(shape_input).to(self.device)#.item())
         b = torch.ones(shape_output).to(self.device)#.item())
-        a, b = self.change_shape(a, b, target)
-        n1 = torch.prod(torch.tensor(a.shape[1:]).detach()).item()
-        n2=torch.prod(torch.tensor(b.shape[1:]).detach()).item()
+        a, b = self.change_shape(a, b,True)
+        self.n_input = torch.prod(torch.tensor(a.shape[1:])).item()
         if not target:
             self.T = nn.Sequential(
-                nn.Linear(n1 + n2, 10),
+                nn.Linear(self.n_input * 2, 10),
                 nn.ReLU(),
                 nn.Linear(10, 1)).to(self.device)
         if target:
             self.T = nn.Sequential(
-                nn.Linear(n1 + n2, 10),
-                # nn.BatchNorm1d(10),
+                nn.Linear(self.n_input * 2, 10),
+                nn.BatchNorm1d(10),
                 nn.ReLU(),
                 nn.Linear(10, 1)).to(self.device)
         '''
@@ -81,18 +80,16 @@ class MINE(nn.Module):
     def lcm(self,a, b):
         return abs(a * b) // math.gcd(a, b)
 
-    def change_shape(self,x, layer,target=False):
+    def change_shape(self,x, layer,target):
         if not target:
             layer=layer+(torch.randn(layer.shape).to(self.device).detach()*2)
-            # print("noise is added")
         layer = layer.reshape(int(torch.tensor(layer.shape[0])), int(torch.prod(torch.tensor(layer.shape[1:]))))
         x = x.reshape(int(torch.tensor(x.shape[0])), int(torch.prod(torch.tensor(x.shape[1:]))))
         if not target:
             x = nn.ReLU().to(self.device)(nn.Linear(x.shape[1], layer.shape[1]).to(self.device)(x))
-            # print("shape after transfer",x.shape,layer.shape)
-        # else:
-        #     layer = layer + (torch.randn(layer.shape).to(self.device).detach() * 1)
-        #     layer=nn.ReLU().to(self.device)(nn.Linear(layer.shape[1],x.shape[1]).to(self.device)(layer))
+        else:
+            layer = layer + (torch.randn(layer.shape).to(self.device).detach())
+            layer=nn.ReLU().to(self.device)(nn.Linear(layer.shape[1],x.shape[1]).to(self.device)(layer))
 
         return x,layer
 
@@ -249,6 +246,8 @@ class ConvNet(nn.Module):
         print('Test set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
             test_loss, correct, len(test_loader.dataset),
             100. * correct / len(test_loader.dataset)))
+        accuracy = 100. * correct / len(test_loader.dataset)
+        return accuracy
 
     
 class TrackMI(nn.Module):
@@ -301,7 +300,7 @@ class TrackMI(nn.Module):
     
         self.mi_values = defaultdict(list)
         for layer in ['maxP1','maxP2','relu3','sm1']:
-            self.mineList[layer] = MINE(self.dimensions['input'], self.dimensions[layer], self.args,target=False).to(self.device)
+            self.mineList[layer] = MINE(self.dimensions['input'], self.dimensions[layer], self.args).to(self.device)
             self.mineList[layer+'T'] = MINE(self.dimensions['target'], self.dimensions[layer], self.args,target=True).to(self.device)
             
 
@@ -319,7 +318,6 @@ class TrackMI(nn.Module):
         #print('\nMINE training, layer: %s, target: %s' % (layer, target))
         for mine_epoch in range(mine_epochs):
             loss_per_epoch = 0
-            step = 0
             ema_step = 1
             ema = 1.
             for batch_idx, (x, y) in tqdm(enumerate(train_loader)):
@@ -331,29 +329,28 @@ class TrackMI(nn.Module):
                     y_onehot.zero_()
                     y_onehot.scatter_(1, y.view(y.shape[0], 1), 1)
                     if method == 'ema':
-                        loss, ema = model.lower_bound(y_onehot, tX, method, ema, ema_step,target=target)
+                        loss, ema = model.lower_bound(y_onehot, tX, method, ema, ema_step,target)
                         ema_step += 1
                     else:
-                        loss = model.lower_bound(y_onehot, tX, method,target=target)
+                        loss = model.lower_bound(y_onehot, tX, method,target)
                 else:
                     tX = convNet(x, layer).detach()
                     if method =='ema':
-                        loss, ema = model.lower_bound(x, tX, method, ema, ema_step,target=target)
+                        loss, ema = model.lower_bound(x, tX, method, ema, ema_step,target)
                         ema_step += 1
                     else:
-                        loss = model.lower_bound(x, tX, method,target=target)
+                        loss = model.lower_bound(x, tX, method,target)
                 loss_per_epoch += loss
-                #print("Epoch MINE: %s. Lowerbound: %s" % (mine_epoch, loss.item()))
                 loss.backward()
                 # torch.nn.utils.clip_grad_norm(model.parameters(), 2)
                 optimizer.step()
                 
                 #############
-                
+                #if batch_idx == 1:
+                #   break
 
 
             loss_list.append(-loss_per_epoch.detach().item() / len(train_loader))  # since pytorch can only minimize the return of mine is negative, we have to invert that again
-            #if layer == 'sm1' and target:
             print('Epoch MINE: %s. Layer: %s. Target: %s. Lowerbound: %s' % (mine_epoch, layer, target, -loss_per_epoch.detach().cpu().numpy() / len(train_loader)))
         if plot:
             # Plot
@@ -365,7 +362,6 @@ class TrackMI(nn.Module):
             plt.xlabel('epochs')
             plt.show()
         return loss_list
-
 
     def run(self, save=False, mine_method='kl'):
         '''
@@ -386,6 +382,7 @@ class TrackMI(nn.Module):
             optim_layers = [self.args.optim_layers]
         convnet_acc = []
         for epoch in range(self.args.epochs):
+
             self.convN.train(self.train_loader, epoch)
             acc = self.convN.test(self.test_loader)
             '''
@@ -397,17 +394,14 @@ class TrackMI(nn.Module):
                 mine_ep = self.mine_epochs
                 convnet_acc.append(acc)
                 for layer in optim_layers:
-                    if self.args.run_target == 'True':
-                        mine_model = MINE(self.dimensions['target'], self.dimensions[layer], self.args).to(self.device)
-                        self.mi_values[layer + 'T'].append(self.trainMine(self.mine_train_loader, mine_ep, self.mine_batch_size,
-                                                                        plot=False, convNet=self.convN.model, mineMod=self.mineList[layer + 'T'],
-                                                                        target=True, layer=layer, method=mine_method))
-                    if self.args.run_input == 'True':
-                        mine_model = MINE(self.dimensions['input'], self.dimensions[layer], self.args).to(self.device)
-                        self.mi_values[layer].append(self.trainMine(self.mine_train_loader, mine_ep, self.mine_batch_size, 
-                                                                    plot=False, convNet=self.convN.model, mineMod=mine_model,
-                                                                    target=False, layer=layer, method=mine_method))
-                    
+                    #self.mi_values[layer + 'T'].append(self.trainMine(self.mine_train_loader, mine_ep, self.mine_batch_size,
+                    #                                                  plot=False, convNet=self.convN.model, mineMod=self.mineList[layer + 'T'],
+                    #                                                  target=True, layer=layer, method=mine_method))
+                    mine_model = MINE(self.dimensions['input'], self.dimensions[layer], self.args).to(self.device)
+                    self.mi_values[layer].append(self.trainMine(self.mine_train_loader, mine_ep, self.mine_batch_size, 
+                                                                plot=False, convNet=self.convN.model, mineMod=mine_model,
+                                                                target=False, layer=layer, method=mine_method))
+                
                 write_results(self.mi_values, convnet_acc, self.args)
 
 
@@ -422,7 +416,6 @@ class TrackMI(nn.Module):
                 torch.save(self.mineList[layer+'T'].state_dict(), path+'/'+layer+'T')
         return self.mineList, self.mi_values
 
-
 def build_information_plane(MI, epochs):
     plt.figure(2)
     epochs = np.arange(1, epochs + 1)
@@ -436,9 +429,14 @@ def build_information_plane(MI, epochs):
     plt.show()
     plt.savefig('information_plane.png')
 
-def write_results(results, args):
+def write_results(results, acc, args):
     if not os.path.exists('MINE_results'):
         os.makedirs('MINE_results')
+    if not os.path.exists('ConvNet_results'):
+        os.makedirs('ConvNet_results')
+    filename_conv = 'ConvNet_results/conv_acc_%s_%s_%s_%s.pickle' % (args.comment, args.epochs, args.batch_size, str(args.lr).replace('.', ''))
+    with open(filename_conv, 'wb') as handle:
+        pickle.dump(acc, handle, protocol=pickle.HIGHEST_PROTOCOL)
     filename = 'MINE_results/mine_values_dict_%s_%s_%s_%s.pickle' % (args.comment, args.mine_epochs, args.mine_batch_size, str(args.mine_lr).replace('.', ''))
     with open(filename, 'wb') as handle:
         pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
@@ -453,7 +451,7 @@ def main():
     parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
                                 help='input batch size for testing (default: 1000)')
     parser.add_argument('--epochs', type=int, default=20, metavar='N',
-                                help='number of epochs to train (default: 10)')
+                                help='number of epochs to train (default: 20)')
     parser.add_argument('--mine-epochs', type=int, default=100, metavar='N', #set to default 100
                                 help='number of epochs to train MINE (default: 100)')
     parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
@@ -482,10 +480,6 @@ def main():
                                 help='Layers to learn MINE on (default: all)')
     parser.add_argument('--comment', type=str, default='',
                                 help='Any additional comments')
-    parser.add_argument('--run-target', type=str, default='True',
-                                help='Run target')
-    parser.add_argument('--run-input', type=str, default='True',
-                                help='Run input')
     args = parser.parse_args()
 
     use_cuda = not args.no_cuda and torch.cuda.is_available()
