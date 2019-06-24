@@ -1,11 +1,9 @@
-#!/bin/bash
-
-#SBATCH --job-name=trackMI
+#SBATCH --job-name=trackMI_100_0.001_256_flatten_output_only
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=3
 #SBATCH --ntasks-per-node=1
-#SBATCH --time=6:00:00
-#SBATCH --mem=60000M
+#SBATCH --time=12:00:00
+#SBATCH --mem=128000M
 #SBATCH --partition=gpu_shared_course
 #SBATCH --gres=gpu:1
 #SBATCH --mail-type=BEGIN,END
@@ -19,5 +17,4 @@ module load cuDNN/7.0.5-CUDA-9.0.176
 module load NCCL/2.0.5-CUDA-9.0.176
 export LD_LIBRARY_PATH=/hpc/eb/Debian9/cuDNN/7.1-CUDA-8.0.44-GCCcore-5.4.0/lib64:$LD_LIBRARY_PATH
 
-srun python3 -u TrackMI_lisa.py 
-
+srun python3 -u TrackMI_main_separate.py --mine-lr 0.001 --conv-path ConvNet_models/convN_10_64_001 --mine-batch-size 256 --mine-method kl --mine-optimizer adam  --comment flatten_output_only

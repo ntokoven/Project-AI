@@ -28,16 +28,18 @@ class MINE(nn.Module):
         self.device = torch.device("cuda" if use_cuda else "cpu")
         a = torch.ones(shape_input).to(self.device)#.item())
         b = torch.ones(shape_output).to(self.device)#.item())
-        a, b = self.change_shape(a, b,True)
-        self.n_input = torch.prod(torch.tensor(a.shape[1:])).item()
+        a, b = self.change_shape(a, b,target)
+        n1 = torch.prod(torch.tensor(a.shape[1:])).item()
+        n2=torch.prod(torch.tensor(b.shape[1:])).item()
+        print("n1+n2",n1,n2)
         if not target:
             self.T = nn.Sequential(
-                nn.Linear(a.shape[1]+b.shape[1], 10),
+                nn.Linear(n1+n2, 10),
                 nn.ReLU(),
                 nn.Linear(10, 1)).to(self.device)
         if target:
             self.T = nn.Sequential(
-                nn.Linear(a.shape[1]+b.shape[1], 10),
+                nn.Linear(n1+n2, 10),
                 # nn.BatchNorm1d(10),
                 nn.ReLU(),
                 nn.Linear(10, 1)).to(self.device)
@@ -80,13 +82,15 @@ class MINE(nn.Module):
     def lcm(self,a, b):
         return abs(a * b) // math.gcd(a, b)
 
-    def change_shape(self,x, layer,target):
+    def change_shape(self,x, layer,target=False):
         if not target:
             layer=layer+(torch.randn(layer.shape).to(self.device).detach()*2)
+            print("noise is added")
         layer = layer.reshape(int(torch.tensor(layer.shape[0])), int(torch.prod(torch.tensor(layer.shape[1:]))))
         x = x.reshape(int(torch.tensor(x.shape[0])), int(torch.prod(torch.tensor(x.shape[1:]))))
         if not target:
             x = nn.ReLU().to(self.device)(nn.Linear(x.shape[1], layer.shape[1]).to(self.device)(x))
+            print("shape after transfer",x.shape)
         # else:
         #     layer = layer + (torch.randn(layer.shape).to(self.device).detach() * 1)
         #     layer=nn.ReLU().to(self.device)(nn.Linear(layer.shape[1],x.shape[1]).to(self.device)(layer))
@@ -298,7 +302,7 @@ class TrackMI(nn.Module):
     
         self.mi_values = defaultdict(list)
         for layer in ['maxP1','maxP2','relu3','sm1']:
-            #self.mineList[layer] = MINE(self.dimensions['input'], self.dimensions[layer], self.args).to(self.device)
+            self.mineList[layer] = MINE(self.dimensions['input'], self.dimensions[layer], self.args,target=False).to(self.device)
             self.mineList[layer+'T'] = MINE(self.dimensions['target'], self.dimensions[layer], self.args,target=True).to(self.device)
             
 
@@ -363,7 +367,7 @@ class TrackMI(nn.Module):
             plt.show()
         return loss_list
 
-    def run(self, mine_path=None, save=True, mine_method='kl'):
+    def run(self, mine_path=None, save=False, mine_method='kl'):
         if len(self.args.conv_path) == 0:
             if not os.path.exists('ConvNet_models'):
                 os.makedirs('ConvNet_models')
@@ -381,10 +385,10 @@ class TrackMI(nn.Module):
             optim_layers = [self.args.optim_layers]
         for layer in optim_layers:
 
-            self.mi_values[layer + 'T'] = self.trainMine(self.mine_train_loader, self.mine_epochs, self.mine_batch_size,
-                                                         plot=False, convNet=self.convN.model,
-                                                         mineMod=self.mineList[layer + 'T'], target=True, layer=layer,
-                                                         method=mine_method)
+            # self.mi_values[layer + 'T'] = self.trainMine(self.mine_train_loader, self.mine_epochs, self.mine_batch_size,
+            #                                              plot=False, convNet=self.convN.model,
+            #                                              mineMod=self.mineList[layer + 'T'], target=True, layer=layer,
+            #                                              method=mine_method)
 
             self.mi_values[layer] = self.trainMine(self.mine_train_loader, self.mine_epochs, self.mine_batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer],target=False, layer=layer, method=mine_method)
 
