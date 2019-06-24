@@ -29,8 +29,8 @@ class MINE(nn.Module):
         a = torch.ones(shape_input).to(self.device)#.item())
         b = torch.ones(shape_output).to(self.device)#.item())
         a, b = self.change_shape(a, b,target)
-        n1 = torch.prod(torch.tensor(a.shape[1:])).item()
-        n2=torch.prod(torch.tensor(b.shape[1:])).item()
+        n1 = torch.prod(torch.tensor(a.shape[1:]).detach()).item()
+        n2=torch.prod(torch.tensor(b.shape[1:]).detach()).item()
         print("n1+n2",n1,n2)
         if not target:
             self.T = nn.Sequential(
@@ -85,12 +85,12 @@ class MINE(nn.Module):
     def change_shape(self,x, layer,target=False):
         if not target:
             layer=layer+(torch.randn(layer.shape).to(self.device).detach()*2)
-            print("noise is added")
+            # print("noise is added")
         layer = layer.reshape(int(torch.tensor(layer.shape[0])), int(torch.prod(torch.tensor(layer.shape[1:]))))
         x = x.reshape(int(torch.tensor(x.shape[0])), int(torch.prod(torch.tensor(x.shape[1:]))))
         if not target:
             x = nn.ReLU().to(self.device)(nn.Linear(x.shape[1], layer.shape[1]).to(self.device)(x))
-            print("shape after transfer",x.shape)
+            # print("shape after transfer",x.shape,layer.shape)
         # else:
         #     layer = layer + (torch.randn(layer.shape).to(self.device).detach() * 1)
         #     layer=nn.ReLU().to(self.device)(nn.Linear(layer.shape[1],x.shape[1]).to(self.device)(layer))
@@ -332,17 +332,17 @@ class TrackMI(nn.Module):
                     y_onehot.zero_()
                     y_onehot.scatter_(1, y.view(y.shape[0], 1), 1)
                     if method == 'ema':
-                        loss, ema = model.lower_bound(y_onehot, tX, method, ema, ema_step,target)
+                        loss, ema = model.lower_bound(y_onehot, tX, method, ema, ema_step,target=target)
                         ema_step += 1
                     else:
-                        loss = model.lower_bound(y_onehot, tX, method,target)
+                        loss = model.lower_bound(y_onehot, tX, method,target=target)
                 else:
                     tX = convNet(x, layer).detach()
                     if method =='ema':
-                        loss, ema = model.lower_bound(x, tX, method, ema, ema_step,target)
+                        loss, ema = model.lower_bound(x, tX, method, ema, ema_step,target=target)
                         ema_step += 1
                     else:
-                        loss = model.lower_bound(x, tX, method,target)
+                        loss = model.lower_bound(x, tX, method,target=target)
                 loss_per_epoch += loss
                 #print("Epoch MINE: %s. Lowerbound: %s" % (mine_epoch, loss.item()))
                 loss.backward()
@@ -390,7 +390,7 @@ class TrackMI(nn.Module):
             #                                              mineMod=self.mineList[layer + 'T'], target=True, layer=layer,
             #                                              method=mine_method)
 
-            self.mi_values[layer] = self.trainMine(self.mine_train_loader, self.mine_epochs, self.mine_batch_size, plot=False, convNet=self.convN.model, mineMod=self.mineList[layer],target=False, layer=layer, method=mine_method)
+            self.mi_values[layer] = self.trainMine(self.mine_train_loader, self.mine_epochs, self.mine_batch_size, plot=False, convNet=self.convN.model, target=False, mineMod=self.mineList[layer],layer=layer, method=mine_method)
 
 
 
