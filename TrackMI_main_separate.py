@@ -32,13 +32,13 @@ class MINE(nn.Module):
         self.n_input = torch.prod(torch.tensor(a.shape[1:])).item()
         if not target:
             self.T = nn.Sequential(
-                nn.Linear(self.n_input * 2, 10),
+                nn.Linear(a.shape[1]+b.shape[1], 10),
                 nn.ReLU(),
                 nn.Linear(10, 1)).to(self.device)
         if target:
             self.T = nn.Sequential(
-                nn.Linear(self.n_input * 2, 10),
-                nn.BatchNorm1d(10),
+                nn.Linear(a.shape[1]+b.shape[1], 10),
+                # nn.BatchNorm1d(10),
                 nn.ReLU(),
                 nn.Linear(10, 1)).to(self.device)
         '''
@@ -87,9 +87,9 @@ class MINE(nn.Module):
         x = x.reshape(int(torch.tensor(x.shape[0])), int(torch.prod(torch.tensor(x.shape[1:]))))
         if not target:
             x = nn.ReLU().to(self.device)(nn.Linear(x.shape[1], layer.shape[1]).to(self.device)(x))
-        else:
-            layer = layer + (torch.randn(layer.shape).to(self.device).detach() * 2)
-            layer=nn.ReLU().to(self.device)(nn.Linear(layer.shape[1],x.shape[1]).to(self.device)(layer))
+        # else:
+        #     layer = layer + (torch.randn(layer.shape).to(self.device).detach() * 1)
+        #     layer=nn.ReLU().to(self.device)(nn.Linear(layer.shape[1],x.shape[1]).to(self.device)(layer))
 
         return x,layer
 
@@ -298,7 +298,7 @@ class TrackMI(nn.Module):
     
         self.mi_values = defaultdict(list)
         for layer in ['maxP1','maxP2','relu3','sm1']:
-            self.mineList[layer] = MINE(self.dimensions['input'], self.dimensions[layer], self.args).to(self.device)
+            #self.mineList[layer] = MINE(self.dimensions['input'], self.dimensions[layer], self.args).to(self.device)
             self.mineList[layer+'T'] = MINE(self.dimensions['target'], self.dimensions[layer], self.args,target=True).to(self.device)
             
 
