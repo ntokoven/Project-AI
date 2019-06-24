@@ -202,8 +202,8 @@ class ConvNet(nn.Module):
             '''
             Constraints the amount of data used per epoch 
             '''
-            if batch_idx == 1:
-               break
+            #if batch_idx == 1:
+            #   break
 
     def test(self, test_loader):
         self.model.eval()
@@ -275,8 +275,8 @@ class TrackMI(nn.Module):
     
         self.mi_values = defaultdict(list)
         for layer in ['maxP1','maxP2','relu3','sm1']:
-            self.mineList[layer] = MINE(self.dimensions['input'], self.dimensions[layer], self.args, target=False).to(self.device)
-            self.mineList[layer+'T'] = MINE(self.dimensions['target'], self.dimensions[layer], self.args, target=True).to(self.device)
+            self.mineList[layer] = MINE(self.dimensions['input'], self.dimensions[layer], self.args,target=False).to(self.device)
+            self.mineList[layer+'T'] = MINE(self.dimensions['target'], self.dimensions[layer], self.args,target=True).to(self.device)
             
 
 
@@ -372,16 +372,12 @@ class TrackMI(nn.Module):
                 convnet_acc.append(acc)
                 for layer in optim_layers:
                     if self.args.run_target == 'True':
-                        mine_model = MINE(self.dimensions['target'], self.dimensions[layer], self.args, target = True).to(self.device)
-                        #mine_model = self.mineList[layer +'T']
                         self.mi_values[layer + 'T'].append(self.trainMine(self.mine_train_loader, mine_ep, self.mine_batch_size,
-                                                                        plot=False, convNet=self.convN.model, mineMod=mine_model,
+                                                                        plot=False, convNet=self.convN.model, mineMod=self.mineList[layer + 'T'],
                                                                         target=True, layer=layer, method=mine_method))
                     if self.args.run_input == 'True':
-                        mine_model = MINE(self.dimensions['input'], self.dimensions[layer], self.args, target = False).to(self.device)
-                        #mine_model = self.mineList[layer]
                         self.mi_values[layer].append(self.trainMine(self.mine_train_loader, mine_ep, self.mine_batch_size, 
-                                                                    plot=False, convNet=self.convN.model, mineMod=mine_model,
+                                                                    plot=False, convNet=self.convN.model, mineMod=self.mineList[layer],
                                                                     target=False, layer=layer, method=mine_method))
                     
                 write_results(self.mi_values, convnet_acc, self.args)

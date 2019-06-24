@@ -28,19 +28,20 @@ class MINE(nn.Module):
         self.device = torch.device("cuda" if use_cuda else "cpu")
         a = torch.ones(shape_input).to(self.device)#.item())
         b = torch.ones(shape_output).to(self.device)#.item())
-        a, b = self.change_shape(a, b,True)
-        self.n_input = torch.prod(torch.tensor(a.shape[1:])).item()
+        a, b = self.change_shape(a, b, target)
+        n1 = torch.prod(torch.tensor(a.shape[1:]).detach()).item()
+        n2=torch.prod(torch.tensor(b.shape[1:]).detach()).item()
         if not target:
             self.T = nn.Sequential(
-                nn.Linear(self.n_input * 2, 10),
+                nn.Linear(n1 + n2, 10),
                 nn.ReLU(),
                 nn.Linear(10, 1)).to(self.device)
         if target:
             self.T = nn.Sequential(
-                nn.Linear(self.n_input * 2, 10),
-                nn.BatchNorm1d(10),
+                nn.Linear(n1 + n2, 100),
+                # nn.BatchNorm1d(10),
                 nn.ReLU(),
-                nn.Linear(10, 1)).to(self.device)
+                nn.Linear(100, 1)).to(self.device)
         '''
         for module in self.T.modules():
             if hasattr(module, 'weight'):
@@ -77,48 +78,21 @@ class MINE(nn.Module):
         return -mine
 
 
-    def lcm(self,a, b):
-        return abs(a * b) // math.gcd(a, b)
-
-    def change_shape(self,x, layer,target):
-        if not target:
-            layer=layer+(torch.randn(layer.shape).to(self.device).detach()*2)
+    
+    def change_shape(self,x, layer,target=False):
+        #if not target:
+        layer += 2 * torch.randn(layer.shape).to(self.device).detach()
         layer = layer.reshape(int(torch.tensor(layer.shape[0])), int(torch.prod(torch.tensor(layer.shape[1:]))))
         x = x.reshape(int(torch.tensor(x.shape[0])), int(torch.prod(torch.tensor(x.shape[1:]))))
         if not target:
             x = nn.ReLU().to(self.device)(nn.Linear(x.shape[1], layer.shape[1]).to(self.device)(x))
-        else:
-            layer = layer + (torch.randn(layer.shape).to(self.device).detach() * 2)
-            layer=nn.ReLU().to(self.device)(nn.Linear(layer.shape[1],x.shape[1]).to(self.device)(layer))
+        # else:
+        #     layer = layer + (torch.randn(layer.shape).to(self.device).detach() * 1)
+        #     layer=nn.ReLU().to(self.device)(nn.Linear(layer.shape[1],x.shape[1]).to(self.device)(layer))
 
-        return x,layer
+        return x, layer
 
-    #"brute-force" (every with every) version of shape transition
-    def change_shape_old(self, x, y):
-        #print('Shapes ot T input:')
-        #print(x.shape)
-        #print(y.shape,'\n\n\n')
-        '''
-        Change to convolutions
-        '''
-        n = abs(x.dim() - y.dim())
-        if x.dim() > y.dim():
-            for i in range(n):
-                y = torch.unsqueeze(torch.tensor(y), 1).clone().detach().requires_grad_(True)
-        elif x.dim() < y.dim():
-            for i in range(n):
-                x = torch.unsqueeze(torch.tensor(x), 1).clone().detach().requires_grad_(True)
-        desired_shape = []
-        for i in range(x.dim()):
-            desired_shape.append(self.lcm(x.shape[i], y.shape[i]))
-        d = 1
-        for shape in desired_shape:
-            d *= shape
-        xresh=x.reshape(int(torch.prod(torch.tensor(x.shape[0:]))))
-        yresh=y.reshape(int(torch.prod(torch.tensor(y.shape[0:]))))
-        x = xresh.repeat(d // xresh.shape[0]).reshape(desired_shape)
-        y = yresh.repeat(d // yresh.shape[0]).reshape(desired_shape)
-        return x, y
+    
 
 
 class LeNet(nn.Module):
@@ -428,7 +402,7 @@ def write_results(results, acc, args):
         os.makedirs('MINE_results')
     if not os.path.exists('ConvNet_results'):
         os.makedirs('ConvNet_results')
-    filename_conv = 'ConvNet_results/conv_acc_%s_%s_%s_%s.txt' % (args.comment, args.epochs, args.batch_size, str(args.lr).replace('.', ''))
+    filename_conv = 'ConvNet_results/conv_acc_%s_%s_%s_%s.pickle' % (args.comment, args.epochs, args.batch_size, str(args.lr).replace('.', ''))
     with open(filename_conv, 'wb') as handle:
         pickle.dump(acc, handle, protocol=pickle.HIGHEST_PROTOCOL)
     filename = 'MINE_results/mine_values_dict_%s_%s_%s_%s.pickle' % (args.comment, args.mine_epochs, args.mine_batch_size, str(args.mine_lr).replace('.', ''))
