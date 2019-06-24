@@ -42,6 +42,8 @@ class MINE(nn.Module):
                 nn.Linear(n1+n2, 10),
                 # nn.BatchNorm1d(10),
                 nn.ReLU(),
+                nn.Linear(10,10),
+                nn.ReLU(),
                 nn.Linear(10, 1)).to(self.device)
         '''
         for module in self.T.modules():
@@ -90,6 +92,8 @@ class MINE(nn.Module):
         x = x.reshape(int(torch.tensor(x.shape[0])), int(torch.prod(torch.tensor(x.shape[1:]))))
         if not target:
             x = nn.ReLU().to(self.device)(nn.Linear(x.shape[1], layer.shape[1]).to(self.device)(x))
+        # else:
+        #     layer = nn.ReLU().to(self.device)(nn.Linear(layer.shape[1], x.shape[1]).to(self.device)(layer))
             # print("shape after transfer",x.shape,layer.shape)
         # else:
         #     layer = layer + (torch.randn(layer.shape).to(self.device).detach() * 1)
@@ -385,12 +389,12 @@ class TrackMI(nn.Module):
             optim_layers = [self.args.optim_layers]
         for layer in optim_layers:
 
-            # self.mi_values[layer + 'T'] = self.trainMine(self.mine_train_loader, self.mine_epochs, self.mine_batch_size,
-            #                                              plot=False, convNet=self.convN.model,
-            #                                              mineMod=self.mineList[layer + 'T'], target=True, layer=layer,
-            #                                              method=mine_method)
+            self.mi_values[layer + 'T'] = self.trainMine(self.mine_train_loader, self.mine_epochs, self.mine_batch_size,
+                                                         plot=False, convNet=self.convN.model,
+                                                         mineMod=self.mineList[layer + 'T'], target=True, layer=layer,
+                                                         method=mine_method)
 
-            self.mi_values[layer] = self.trainMine(self.mine_train_loader, self.mine_epochs, self.mine_batch_size, plot=False, convNet=self.convN.model, target=False, mineMod=self.mineList[layer],layer=layer, method=mine_method)
+            # self.mi_values[layer] = self.trainMine(self.mine_train_loader, self.mine_epochs, self.mine_batch_size, plot=False, convNet=self.convN.model, target=False, mineMod=self.mineList[layer],layer=layer, method=mine_method)
 
 
 
