@@ -39,12 +39,12 @@ class MINE(nn.Module):
                 nn.Linear(10, 1)).to(self.device)
         if target:
             self.T = nn.Sequential(
-                nn.Linear(n1+n2, 10),
+                nn.Linear(n1+n2, 100),
                 # nn.BatchNorm1d(10),
                 nn.ReLU(),
-                nn.Linear(10,10),
-                nn.ReLU(),
-                nn.Linear(10, 1)).to(self.device)
+                # nn.Linear(10,10),
+                # nn.ReLU(),
+                nn.Linear(100, 1)).to(self.device)
         '''
         for module in self.T.modules():
             if hasattr(module, 'weight'):
@@ -85,8 +85,9 @@ class MINE(nn.Module):
         return abs(a * b) // math.gcd(a, b)
 
     def change_shape(self,x, layer,target=False):
-        if not target:
-            layer=layer+(torch.randn(layer.shape).to(self.device).detach()*2)
+
+        layer=layer+(torch.randn(layer.shape).to(self.device).detach()*2)
+
             # print("noise is added")
         layer = layer.reshape(int(torch.tensor(layer.shape[0])), int(torch.prod(torch.tensor(layer.shape[1:]))))
         x = x.reshape(int(torch.tensor(x.shape[0])), int(torch.prod(torch.tensor(x.shape[1:]))))
