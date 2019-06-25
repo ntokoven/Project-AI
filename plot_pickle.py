@@ -9,12 +9,18 @@ def main():
                         help='none')
     args = parser.parse_args()
     pickle_in = open(args.import_path+".pickle","rb")
-    example_dict = pickle.load(pickle_in)
-    epochs = np.arange(1, 50 + 1)
+    mi_values = pickle.load(pickle_in)
+    epochs = np.arange(1, 6 + 1)
+    values = {}
+    for key in mi_values.keys():
+        values[key] = np.array(mi_values[key])#.reshape(180)
+        print(values[key].shape)
     plt.figure(1)
-    for i in example_dict.keys():
+    for key in mi_values.keys():
+        print(len(mi_values[key]), len(mi_values[key][1]))
+    for i in mi_values.keys():
         #print(i, example_dict[i])
-        plt.plot(epochs, example_dict[i], label=i)
+        plt.plot(epochs, np.max(values[i], axis=1), label=i)
     plt.legend()
     plt.ylabel('MI(x, L_i + eps)')
     plt.xlabel('MINE epochs')

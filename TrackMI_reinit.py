@@ -81,12 +81,12 @@ class MINE(nn.Module):
 
     
     def change_shape(self,x, layer,target=False):
-        #if not target:
+        #if target:
         layer += 2 * torch.randn(layer.shape).to(self.device).detach()
         layer = layer.reshape(int(torch.tensor(layer.shape[0])), int(torch.prod(torch.tensor(layer.shape[1:]))))
         x = x.reshape(int(torch.tensor(x.shape[0])), int(torch.prod(torch.tensor(x.shape[1:]))))
-        if not target:
-            x = nn.ReLU().to(self.device)(nn.Linear(x.shape[1], layer.shape[1]).to(self.device)(x))
+        #if not target:
+            #x = nn.ReLU().to(self.device)(nn.Linear(x.shape[1], layer.shape[1]).to(self.device)(x))
         # else:
         #     layer = layer + (torch.randn(layer.shape).to(self.device).detach() * 1)
         #     layer=nn.ReLU().to(self.device)(nn.Linear(layer.shape[1],x.shape[1]).to(self.device)(layer))
@@ -94,7 +94,25 @@ class MINE(nn.Module):
         return x, layer
 
     
+    def change_shape_convolution(self,x, layer,target):
+        print("orig", x.shape, layer.shape)
 
+        if x.dim() == layer.dim():
+            if x.dim() == 4:
+                x = nn.ReLU().to(self.device)(nn.Conv2d(1, 1, (x.shape[2] - layer.shape[2] + 1, x.shape[2] - layer.shape[2] + 1)).to(self.device)(x))
+
+            else:
+                layer = nn.ReLU().to(self.device)(nn.Linear(layer.shape[1], x.shape[1]).to(self.device)(layer))
+        else:
+            if x.dim() > layer.dim():
+                x = x.reshape(x.shape[0], x.shape[1] * x.shape[2] * x.shape[3])
+                x = nn.ReLU().to(self.device)(nn.Linear(x.shape[1], layer.shape[1]).to(self.device)(x))
+            else:
+                layer = layer.reshape(layer.shape[0], layer.shape[1] * layer.shape[2] * layer.shape[3])
+                layer = nn.ReLU()(nn.Linear(layer.shape[1], x.shape[1]).to(self.device)(layer))
+        layer = layer.reshape(int(torch.tensor(layer.shape[0])), int(torch.prod(torch.tensor(layer.shape[1:]))))
+        x = x.reshape(int(torch.tensor(x.shape[0])), int(torch.prod(torch.tensor(x.shape[1:]))))
+        return x, layer
 
 
 

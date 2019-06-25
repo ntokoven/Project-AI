@@ -79,17 +79,38 @@ class MINE(nn.Module):
 
 
     
+   
     def change_shape(self,x, layer,target=False):
-        #if not target:
+        #if target:
         layer += 2 * torch.randn(layer.shape).to(self.device).detach()
         layer = layer.reshape(int(torch.tensor(layer.shape[0])), int(torch.prod(torch.tensor(layer.shape[1:]))))
         x = x.reshape(int(torch.tensor(x.shape[0])), int(torch.prod(torch.tensor(x.shape[1:]))))
-        if not target:
-            x = nn.ReLU().to(self.device)(nn.Linear(x.shape[1], layer.shape[1]).to(self.device)(x))
+        #if not target:
+            #x = nn.ReLU().to(self.device)(nn.Linear(x.shape[1], layer.shape[1]).to(self.device)(x))
         # else:
         #     layer = layer + (torch.randn(layer.shape).to(self.device).detach() * 1)
         #     layer=nn.ReLU().to(self.device)(nn.Linear(layer.shape[1],x.shape[1]).to(self.device)(layer))
 
+        return x, layer
+
+    def change_shape_convolution(self,x, layer,target):
+        print("orig", x.shape, layer.shape)
+
+        if x.dim() == layer.dim():
+            if x.dim() == 4:
+                x = nn.ReLU().to(self.device)(nn.Conv2d(1, 1, (x.shape[2] - layer.shape[2] + 1, x.shape[2] - layer.shape[2] + 1)).to(self.device)(x))
+
+            else:
+                layer = nn.ReLU().to(self.device)(nn.Linear(layer.shape[1], x.shape[1]).to(self.device)(layer))
+        else:
+            if x.dim() > layer.dim():
+                x = x.reshape(x.shape[0], x.shape[1] * x.shape[2] * x.shape[3])
+                x = nn.ReLU().to(self.device)(nn.Linear(x.shape[1], layer.shape[1]).to(self.device)(x))
+            else:
+                layer = layer.reshape(layer.shape[0], layer.shape[1] * layer.shape[2] * layer.shape[3])
+                layer = nn.ReLU()(nn.Linear(layer.shape[1], x.shape[1]).to(self.device)(layer))
+        layer = layer.reshape(int(torch.tensor(layer.shape[0])), int(torch.prod(torch.tensor(layer.shape[1:]))))
+        x = x.reshape(int(torch.tensor(x.shape[0])), int(torch.prod(torch.tensor(x.shape[1:]))))
         return x, layer
 
     
@@ -389,14 +410,15 @@ def build_information_plane(MI, epochs):
     plt.show()
     plt.savefig('information_plane.png')
 
-def write_results(results, acc, args):
+def write_results(results, args, acc=[]):
     if not os.path.exists('MINE_results'):
         os.makedirs('MINE_results')
     if not os.path.exists('ConvNet_results'):
         os.makedirs('ConvNet_results')
     filename_conv = 'ConvNet_results/conv_acc_%s_%s_%s_%s.pickle' % (args.comment, args.epochs, args.batch_size, str(args.lr).replace('.', ''))
-    with open(filename_conv, 'wb') as handle:
-        pickle.dump(acc, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    if len(acc) > 0:
+        with open(filename_conv, 'wb') as handle:
+            pickle.dump(acc, handle, protocol=pickle.HIGHEST_PROTOCOL)
     filename = 'MINE_results/mine_values_dict_%s_%s_%s_%s.pickle' % (args.comment, args.mine_epochs, args.mine_batch_size, str(args.mine_lr).replace('.', ''))
     with open(filename, 'wb') as handle:
         pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)

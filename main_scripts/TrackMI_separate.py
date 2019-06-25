@@ -389,14 +389,15 @@ def build_information_plane(MI, epochs):
     plt.show()
     plt.savefig('information_plane.png')
 
-def write_results(results, acc, args):
+def write_results(results, args, acc=[]):
     if not os.path.exists('MINE_results'):
         os.makedirs('MINE_results')
     if not os.path.exists('ConvNet_results'):
         os.makedirs('ConvNet_results')
     filename_conv = 'ConvNet_results/conv_acc_%s_%s_%s_%s.pickle' % (args.comment, args.epochs, args.batch_size, str(args.lr).replace('.', ''))
-    with open(filename_conv, 'wb') as handle:
-        pickle.dump(acc, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    if len(acc) > 0:
+        with open(filename_conv, 'wb') as handle:
+            pickle.dump(acc, handle, protocol=pickle.HIGHEST_PROTOCOL)
     filename = 'MINE_results/mine_values_dict_%s_%s_%s_%s.pickle' % (args.comment, args.mine_epochs, args.mine_batch_size, str(args.mine_lr).replace('.', ''))
     with open(filename, 'wb') as handle:
         pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
