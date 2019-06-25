@@ -452,7 +452,7 @@ def main():
     parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
                                 help='input batch size for testing (default: 1000)')
     parser.add_argument('--epochs', type=int, default=20, metavar='N',
-                                help='number of epochs to train (default: 10)')
+                                help='number of epochs to train (default: 20)')
     parser.add_argument('--mine-epochs', type=int, default=100, metavar='N', #set to default 100
                                 help='number of epochs to train MINE (default: 100)')
     parser.add_argument('--lr', type=float, default=0.0003, metavar='LR',
