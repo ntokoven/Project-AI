@@ -15,6 +15,5 @@ module load eb
 module load Python/3.6.3-foss-2017b
 module load cuDNN/7.0.5-CUDA-9.0.176
 module load NCCL/2.0.5-CUDA-9.0.176
-export LD_LIBRARY_PATH=/hpc/eb/Debian9/cuDNN/7.1-CUDA-8.0.44-GCCcore-5.4.0/lib64:$LD_LIBRARY_PATH
 
 srun python3 -u TrackMI_main_separate.py --mine-lr 0.001 --conv-path ConvNet_models/convN_10_64_001 --mine-batch-size 256 --mine-method kl --mine-optimizer adam  --comment flatten_output_only
