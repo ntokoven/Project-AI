@@ -10,7 +10,7 @@ def main():
     args = parser.parse_args()
     pickle_in = open(args.import_path+".pickle","rb")
     mi_values = pickle.load(pickle_in)
-    epochs = np.arange(1, 6 + 1)
+    epochs = np.arange(1, 2 + 1)
     values = {}
     for key in mi_values.keys():
         values[key] = np.array(mi_values[key])#.reshape(180)

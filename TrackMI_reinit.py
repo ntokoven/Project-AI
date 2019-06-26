@@ -34,9 +34,9 @@ class MINE(nn.Module):
         n2=torch.prod(torch.tensor(b.shape[1:]).detach()).item()
         if not target:
             self.T = nn.Sequential(
-                nn.Linear(n1 + n2, 10),
+                nn.Linear(n1 + n2, self.args.num_hidden),
                 nn.ReLU(),
-                nn.Linear(10, 1)).to(self.device)
+                nn.Linear(self.args.num_hidden, 1)).to(self.device)
         if target:
             self.T = nn.Sequential(
                 nn.Linear(n1 + n2, 100),
@@ -81,8 +81,10 @@ class MINE(nn.Module):
 
     
     def change_shape(self,x, layer,target=False):
-        #if target:
-        layer += 2 * torch.randn(layer.shape).to(self.device).detach()
+        if target:
+            layer += 2 * torch.randn(layer.shape).to(self.device).detach()
+        else:
+            layer += self.args.noise_std * torch.randn(layer.shape).to(self.device).detach()
         layer = layer.reshape(int(torch.tensor(layer.shape[0])), int(torch.prod(torch.tensor(layer.shape[1:]))))
         x = x.reshape(int(torch.tensor(x.shape[0])), int(torch.prod(torch.tensor(x.shape[1:]))))
         #if not target:
@@ -220,8 +222,8 @@ class ConvNet(nn.Module):
             '''
             Constraints the amount of data used per epoch 
             '''
-            if batch_idx == 1:
-               break
+            #if batch_idx == 1:
+            #   break
 
     def test(self, test_loader):
         self.model.eval()
@@ -453,8 +455,8 @@ def main():
                                 help='input batch size for testing (default: 1000)')
     parser.add_argument('--epochs', type=int, default=20, metavar='N',
                                 help='number of epochs to train (default: 20)')
-    parser.add_argument('--mine-epochs', type=int, default=100, metavar='N', #set to default 100
-                                help='number of epochs to train MINE (default: 100)')
+    parser.add_argument('--mine-epochs', type=int, default=50, metavar='N', #set to default 100
+                                help='number of epochs to train MINE (default: 50)')
     parser.add_argument('--lr', type=float, default=0.0003, metavar='LR',
                                 help='learning rate (default: 0.0003)')
     parser.add_argument('--mine-lr', type=float, default=0.001, metavar='LR',
@@ -485,6 +487,10 @@ def main():
                                 help='Run target')
     parser.add_argument('--run-input', type=str, default='True',
                                 help='Run input')
+    parser.add_argument('--num-hidden', type=int, default=10, metavar='N',
+                                help='Number of hidden neurons for MINE(input)')
+    parser.add_argument('--noise-std', type=float, default=2, metavar='N',
+                                help='Std of gaussian noise added for input')
     args = parser.parse_args()
 
     use_cuda = not args.no_cuda and torch.cuda.is_available()
