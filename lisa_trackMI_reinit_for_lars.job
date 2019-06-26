@@ -1,3 +1,4 @@
+#!/bin/sh
 #SBATCH --job-name=trackMI_100_0.001_256_new_reinit
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=3
