@@ -222,8 +222,8 @@ class ConvNet(nn.Module):
             '''
             Constraints the amount of data used per epoch 
             '''
-            if batch_idx == 1:
-               break
+            #if batch_idx == 1:
+            #   break
 
     def test(self, test_loader):
         self.model.eval()
